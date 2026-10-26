@@ -1,0 +1,306 @@
+{
+  "source_commit": "8b50b467ce7dd7eee475aaf5ae86804d95401ae7",
+  "table_sha256": "e88d788e9e4ee12ff8f655ff9de9bcf46fb5cba0070b68d942c379a38b85c946",
+  "samples": [
+    {
+      "file": "01.wav",
+      "name": "Engine Noise 1",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 4512,
+      "table_bytes": 4512,
+      "raw_sha256": "5802a8ee60a0fd3756e826f9b4245c6aea3bf281ce67f8a18738fbee0275854f",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/01"
+    },
+    {
+      "file": "02.wav",
+      "name": "Player Shot Normal 2",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 1000,
+      "table_bytes": 2280,
+      "raw_sha256": "c7701c7529c82854de5ce1d309af3c0f0fe60e6841ea7a06455b69948e0a0567",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/02"
+    },
+    {
+      "file": "03.wav",
+      "name": "Engine Noise",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 13176,
+      "table_bytes": 13176,
+      "raw_sha256": "21bc1a9d1f78f3ae48fc5c0d88a9361effb9e8017163f047266855bf8ff7c1cc",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/03"
+    },
+    {
+      "file": "04.wav",
+      "name": "Player Death",
+      "period": 214,
+      "sample_rate": 16574,
+      "bytes": 21658,
+      "table_bytes": 21658,
+      "raw_sha256": "b2086c31f31fdbe265a642fc947ef2712d92ab4d77a63c9f6abacbdca5df9ba0",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/04"
+    },
+    {
+      "file": "05.wav",
+      "name": "Player Death 2",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 9304,
+      "table_bytes": 9304,
+      "raw_sha256": "f922f5e7a6d6839fb1289cc2278690457d4ad29d7603883804fe4dd6a43d2728",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/05"
+    },
+    {
+      "file": "06.wav",
+      "name": "Player Shot Normal",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 1956,
+      "table_bytes": 1956,
+      "raw_sha256": "af3e12bfd93c8992af9626d79f3a6cd81ff9cdf754d479e335daedf1648132cb",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/06"
+    },
+    {
+      "file": "07.wav",
+      "name": "Player Jump",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 6366,
+      "table_bytes": 6366,
+      "raw_sha256": "111c515a12ed0bedcb67aa0973fe0b253d3dc22835ccfaa38455097192e691d2",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/07"
+    },
+    {
+      "file": "08.wav",
+      "name": "Crackle",
+      "period": 214,
+      "sample_rate": 16574,
+      "bytes": 17812,
+      "table_bytes": 17812,
+      "raw_sha256": "3a51a3f1e1af9c6e41e67beaa3c559a2f857dac64029c49d843c0b16555d9d1a",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/08"
+    },
+    {
+      "file": "09.wav",
+      "name": "Cleared Level",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 14242,
+      "table_bytes": 14242,
+      "raw_sha256": "a46f97a482cd6aa3f112ccb9015cfbad3e6e46d7a43bec7876fb499badd07d43",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/09"
+    },
+    {
+      "file": "10.wav",
+      "name": "Warp",
+      "period": 568,
+      "sample_rate": 6245,
+      "bytes": 28360,
+      "table_bytes": 28360,
+      "raw_sha256": "64d2afb664d5abc18f00d4628df06e815359ca55bd1f13ed18e60198e284ac79",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/10"
+    },
+    {
+      "file": "11.wav",
+      "name": "Large Explosion",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 20674,
+      "table_bytes": 20674,
+      "raw_sha256": "fd3dca55be3d18d992f9233fea1c47e9c6e51116e6eb058de875947e59ba3361",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/11"
+    },
+    {
+      "file": "12.wav",
+      "name": "Powered Up Shot",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 6518,
+      "table_bytes": 6518,
+      "raw_sha256": "76b614b013387ad9cdb9b05a80f23798049179748da89848961019ad96ffe36f",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/12"
+    },
+    {
+      "file": "13.wav",
+      "name": "Get Power Up",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 6890,
+      "table_bytes": 6890,
+      "raw_sha256": "a30a540ebc13e6e979d38a2945917ae288097d3d0a6d5979155e16e2932886cb",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/13"
+    },
+    {
+      "file": "14.wav",
+      "name": "Tink For Spike",
+      "period": 254,
+      "sample_rate": 13964,
+      "bytes": 1038,
+      "table_bytes": 1038,
+      "raw_sha256": "e38bbc0ed4feb0bcd2e45458a4c944b8453eabaa7676a44f85df4d6523fde6f5",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/14"
+    },
+    {
+      "file": "15.wav",
+      "name": "NME At Top Of Web",
+      "period": 428,
+      "sample_rate": 8287,
+      "bytes": 30,
+      "table_bytes": 30,
+      "raw_sha256": "408cc6201185145708dc8d100e8af5a78759698ce7b06ed0ec284f6862ad910c",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/15"
+    },
+    {
+      "file": "16.wav",
+      "name": "Pulse For Pulsar",
+      "period": 856,
+      "sample_rate": 4144,
+      "bytes": 6654,
+      "table_bytes": 6654,
+      "raw_sha256": "8642de15a1c2fd29d8efbd67e2483b94fc5884d9b0d4dacea3d8717648e81a9e",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/16"
+    },
+    {
+      "file": "17.wav",
+      "name": "Normal Explosion",
+      "period": 214,
+      "sample_rate": 16574,
+      "bytes": 10934,
+      "table_bytes": 10934,
+      "raw_sha256": "dbf77286e76c3dfb24adb2f9d17ee8c983dce2e921426f40e525cf13e9b37500",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/17"
+    },
+    {
+      "file": "18.wav",
+      "name": "Extra Explosion",
+      "period": 856,
+      "sample_rate": 4144,
+      "bytes": 6346,
+      "table_bytes": 6346,
+      "raw_sha256": "2f096fb21bb20a44b2a41fdead8a9b1eb9c6beea696c405a16378f906edc1703",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/18"
+    },
+    {
+      "file": "19.wav",
+      "name": "Static or Pulsar",
+      "period": 284,
+      "sample_rate": 12489,
+      "bytes": 16356,
+      "table_bytes": 16356,
+      "raw_sha256": "880ecd9d430cde133475f70a61d7c13959926b2f78b6a1e499e0322e480465dd",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/19"
+    },
+    {
+      "file": "20.wav",
+      "name": "Pulsar Pulse",
+      "period": 856,
+      "sample_rate": 4144,
+      "bytes": 3852,
+      "table_bytes": 3852,
+      "raw_sha256": "2cc3109a6206a2c2c5479e167f6d69c8af823797b65dd70325281d9585ba24a1",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/20"
+    },
+    {
+      "file": "21.wav",
+      "name": "Off Shielded NME",
+      "period": 170,
+      "sample_rate": 20864,
+      "bytes": 10186,
+      "table_bytes": 10186,
+      "raw_sha256": "2419191766d0de4ce514c79679c93e32a8b390a49e85eaa45f7c5f6a446e260a",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/21"
+    },
+    {
+      "file": "22.wav",
+      "name": "Excellent",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 22902,
+      "table_bytes": 22902,
+      "raw_sha256": "ddd80dd090b1378e5c793d47d81ff659469fec7b645a816d4e00144d1101aa2d",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/22"
+    },
+    {
+      "file": "23.wav",
+      "name": "Superzapper Recharge",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 43352,
+      "table_bytes": 43352,
+      "raw_sha256": "a405c4838ac59660ad39d964771529f5f08dd0b5f3eeb40cf6468cbca4f17420",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/23"
+    },
+    {
+      "file": "24.wav",
+      "name": "yes",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 23148,
+      "table_bytes": 23148,
+      "raw_sha256": "41cd2254188364f6d3a55e328a645d691e94386dfaebf568855d9f7e23c5b559",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/24"
+    },
+    {
+      "file": "25.wav",
+      "name": "oneup",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 17326,
+      "table_bytes": 17326,
+      "raw_sha256": "b8459cecd5c6ae916c3458f2cc3348ca97155e611dac51e9c051470940db474e",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/25"
+    },
+    {
+      "file": "26.wav",
+      "name": "screeeam",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 17768,
+      "table_bytes": 17768,
+      "raw_sha256": "eeb7e76618dd3391931a6f86f65226f81264dc6a3c8975c631d5fc27af8338d4",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/26"
+    },
+    {
+      "file": "27.wav",
+      "name": "sexy yes 1",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 11432,
+      "table_bytes": 11348,
+      "raw_sha256": "ab99df4854dae8c416c5a9947de36cb2b7db0bdbfe7a9096b6062a5207e9da3b",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/27"
+    },
+    {
+      "file": "28.wav",
+      "name": "sexy yes 2",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 12854,
+      "table_bytes": 12854,
+      "raw_sha256": "58cec998ab4bc216fb9dde71a012033c00ac2557296680fdfb6f2403c36efa30",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/28"
+    },
+    {
+      "file": "29.wav",
+      "name": "tink",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 1486,
+      "table_bytes": 1486,
+      "raw_sha256": "43e8959d22fbefafe93370d38d31d13155b94634c5469f21ae94f8e66573ba37",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/29"
+    },
+    {
+      "file": "30.wav",
+      "name": "zero",
+      "period": 512,
+      "sample_rate": 6928,
+      "bytes": 8,
+      "table_bytes": 8,
+      "raw_sha256": "af5570f5a1810b7af78caf4bc70a660f0df51e42baf91d4de5b2328de0e83dfc",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/samples/30"
+    }
+  ]
+}

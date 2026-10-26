@@ -1,0 +1,56 @@
+{
+  "source_commit": "8b50b467ce7dd7eee475aaf5ae86804d95401ae7",
+  "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/",
+  "credits": "Imagitec Design / Ian Howe, Alastair Lindsay, Kevin Saville, Julian Hodgson / Atari",
+  "tracks": [
+    {
+      "file": "tune13.mod",
+      "title": "wierd",
+      "bytes": 101416,
+      "sha256": "0e10b218a485bec6508b48b3f87b62f7d792850dbe80cbd3efc2f84a80e337a4",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/tune13.mod"
+    },
+    {
+      "file": "tune7.mod",
+      "title": "temp20",
+      "bytes": 126164,
+      "sha256": "1c79a6cc4c0f21a6e823b3d54b0e95270b067522a70930c52e036676c510d1e5",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/tune7.mod"
+    },
+    {
+      "file": "tune1.mod",
+      "title": "floaty",
+      "bytes": 148340,
+      "sha256": "5597921aa7d303e8efb941ea94e4dc2bf5a7504bb87314f9aef07c649d4371e7",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/tune1.mod"
+    },
+    {
+      "file": "tune3.mod",
+      "title": "reggadelia",
+      "bytes": 150946,
+      "sha256": "b93e358e075d13380ec2d0fda0d97aa04f90c1ad5d65629318b30661d9b86758",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/tune3.mod"
+    },
+    {
+      "file": "rave4.mod",
+      "title": "tune4",
+      "bytes": 102988,
+      "sha256": "dd87a5738a84898df34a2aa229b1b695de32e3050ba1749e46a54518ad80ed13",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/rave4.mod"
+    },
+    {
+      "file": "tune5.mod",
+      "title": "temp16",
+      "bytes": 93402,
+      "sha256": "12ed16cd6f6bf1cd869c57aa7f1b3cb01a4602cdae3e124ed36b8fc2b243f6de",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/tune5.mod"
+    },
+    {
+      "file": "tune12.mod",
+      "title": "thrash5",
+      "bytes": 115682,
+      "sha256": "8b887da68bbd8e12b4e44d0d949efcc167b1eebfac0e852ce3ce7753b4f4605e",
+      "url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/sounds/tune12.mod"
+    }
+  ]
+}

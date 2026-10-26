@@ -1,0 +1,171 @@
+# Tempest XR
+
+A source-informed **Tempest 2000** recreation for Linux desktop and native
+OpenXR, with mouse-wheel controls, a ship-following XR camera, the original
+Jaguar music and sound samples, original shaded meshes, and a 100-wave campaign.
+
+Reference: [Jeff Minter's Jaguar source, preserved by mwenge](https://github.com/mwenge/tempest2k),
+pinned to `8b50b467ce7dd7eee475aaf5ae86804d95401ae7`. This is a native C++17,
+SDL2 and OpenGL implementation; no ROM, emulator or Jaguar toolchain is needed.
+
+## Build and run
+
+Requires CMake 3.18+, a C++17 compiler, pkg-config, SDL2, OpenGL/EGL, X11 and the
+OpenXR loader development packages. On Debian/Ubuntu:
+
+```sh
+sudo apt install build-essential cmake pkg-config libsdl2-dev libgl-dev \
+  libegl-dev libx11-dev libopenxr-dev libopenmpt0
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build --parallel
+./build/tempest-xr
+```
+
+`libopenmpt0` is optional for tracker music; its development headers are
+unnecessary. A desktop build can omit OpenXR with `-DTEMPEST_OPENXR=OFF`.
+Install with `cmake --install build --prefix PREFIX`.
+
+## Controls
+
+Automatic fire starts enabled, so basic play needs only the wheel. Fractional
+wheel input accumulates; closed webs wrap, and open webs stop at their ends.
+
+| Input | Action |
+|---|---|
+| Wheel | Move on rim; select an unlocked starting web on the title screen |
+| Left mouse | Start in XR/SBS; fire when automatic fire is off |
+| Right mouse / Z | Superzapper: first use clears enemies, second kills one |
+| Middle mouse / Space | Jump after collecting the jump powerup |
+| Left/Right or A/D | Alternative steering / starting-web selection |
+| Enter | Start/retry; start a new campaign after victory |
+| P / Escape | Pause/resume; Escape returns game-over/victory to title |
+| F | Toggle automatic fire |
+| V | Enter/leave native OpenXR |
+| R | Recenter the XR rig |
+| B | Half-SBS preview using the XR camera |
+| [ / ] | Wheel sensitivity, 0.25–4 lanes per detent |
+| I | Reverse wheel direction |
+| M | Mute music and effects |
+| N | Cycle original soundtrack modules |
+| F11 | Fullscreen |
+| Ctrl+Q | Quit |
+
+In ring and psychedelic bonus stages, the **wheel controls X**, **holding left
+mouse moves up**, and **holding right mouse moves down**. In the tunnel bonus,
+rotate around the passage using the wheel. These adapt the original rotary
+controller plus vertical-button controls to a mouse.
+
+## Campaign
+
+All 100 source `_nw` schedules are imported, including initial half-period
+delays, repeat intervals and generation budgets. The source wave header is an
+**enemy count**, not a duration: `newgen` decrements it after launching an
+object. The original final-wave alias is preserved. Web selection follows
+`16 + ((level - 1) & 31)` from the shared 48-entry table. Original speed,
+pulse and powerup-delay tables drive progression, with victory after wave 100.
+
+The generator roster includes flippers, three tanker variants, spikers,
+fuseballs, pulsars, two shielded super-flipper variants, mirrors, hostile droids
+and beasts. Tankers release their corresponding pairs. Pulsars electrify lanes
+and split into propagating rim sparks; fuseballs pursue the ship along rails;
+mirrors and shielded enemies reflect normal shots. Enemy projectiles and a
+separately acquired friendly firing droid are implemented.
+
+Powerups progress through **particle laser → points → jump → points → friendly
+droid → bonus token**, followed by additional point awards. The first killed
+enemy offers a pickup; subsequent drops use the imported per-wave kill delay.
+Three tokens earn a bonus at wave clearance. Ring, tunnel and psychedelic
+families use the original course layouts/order. Successful bonuses award points
+and warp five levels, with the source's late-campaign limit on skipping. Failing
+a bonus costs no life.
+
+Jump lasts 0.85 seconds with a three-second recharge. Death removes upgrades.
+Spikes survive Superzapper, block shots, and remain hazardous throughout the
+ship's passage along them during clearance. Every 20,000 points awards a life,
+including thresholds crossed by wave/bonus awards. An airborne jump continues
+across the next-web reset without a camera snap.
+
+Unlocked starting webs, best score and settings live in SDL's preferences
+directory (typically `~/.local/share/de-xr/tempest-xr/settings`). Progress saves
+at new-web checkpoints, game over, victory and normal exit. Demo/capture and
+explicit `--level` runs do not overwrite normal progress.
+
+## XR
+
+```sh
+./build/tempest-xr --xr
+XR_RUNTIME_JSON=/usr/share/openxr/1/openxr_wivrn.json ./build/tempest-xr --xr
+./build/tempest-xr --stereo
+./build/tempest-xr --xr --warp-demo
+```
+
+The camera follows the ship with a 3.8-meter standoff. Rim movement pans the rig,
+jumps move it backward by up to 0.8 meters, and clearance flies it 14 meters
+through the tunnel over 2.4 seconds. The next web is rendered beyond the old
+one; the flight joins its starting lane before resetting the world origin.
+OpenXR predicted eye poses/FOVs remain layered onto the moving rig. A full-sphere
+background fills every head direction, with animated ring/sine patterns.
+
+Keep the SDL host window focused for mouse input. XR controller bindings and
+DomeD overlay/automatic stereo registration are not implemented. The desktop
+companion shows an overview; B selects a stereo camera preview. Lost XR focus
+freezes gameplay/audio; runtime loss returns to desktop and pauses. Wayland uses
+EGL plus `XR_MNDX_egl_enable`; X11 can use GLX. Missing runtime/headset support
+leaves desktop play available and prints the reason.
+
+## Music, samples and effects
+
+The seven original Jaguar `.mod` files are in `assets/music/`. Title, gameplay
+16-wave blocks and bonus music use the original selection. Thirty original
+sample payloads are converted losslessly to WAV for shots, explosions, jumps,
+zaps, powered fire, ricochets and voice announcements. Sample playback uses
+period-derived nominal rates. Missing files use synthesized fallback.
+
+Original `obj2d.s` face lists and vertex intensities supply 37 shaded/animated
+meshes, including the ship frames. Effects include colored explosions, particle
+text breakup, Superzapper arcs, lane pulses, rainbow beam rings, ship trails,
+animated starfields, warp bridges/rings and a scrolling psychedelic bonus floor.
+Melt-o-vision-style scale/rotate/intensity feedback keeps independent histories
+for both XR eyes, SBS eyes and the desktop.
+
+```sh
+./build/tempest-xr --enemy-demo
+./build/tempest-xr --bonus-demo 0       # 0 rings / 1 tunnel / 2 psychedelic
+./build/tempest-xr --stereo --effects-demo
+./build/tempest-xr --no-music          # Keep effects
+./build/tempest-xr --music-dir /path/to/modules
+```
+
+`TEMPEST_MUSIC_DIR` / `TEMPEST_EFFECTS_DIR` override asset directories. Installed
+assets live under `PREFIX/share/tempest-xr/`. Fetch/import tools pin the source
+commit and record URLs/checksums; see [source notes](docs/SOURCE_NOTES.md) and
+[third-party notices](THIRD_PARTY_NOTICES.md).
+
+## Validation
+
+```sh
+ctest --test-dir build --output-on-failure
+mkdir -p artifacts
+SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
+  ./build/tempest-xr --smoke-test artifacts/gameplay.ppm
+python3 tools/test_xr.py              # Optional Monado simulated HMD + compatible GPU
+```
+
+Tests cover the three audited regressions, enemy behaviors, all 100 generation
+budgets, powerup/droid progression, both zaps, bonus success/failure and victory.
+Render checks cover sky directions, mesh data, enemies, bonus modes and effects.
+Asset checks verify module bytes and lossless conversion of the sample payloads.
+Recorded results are in [validation](docs/VALIDATION.md).
+The native XR fixture uses a private runtime directory and leaves the system
+runtime unchanged. It exercises effects/late-jump warp, enemy roster and all
+three bonus families in actual OpenXR sessions.
+
+Useful flags: `--level 1..100`, `--demo` (autoplay), `--frames N`,
+`--capture image.ppm`, `--no-audio`, `--help`. Physical headset/WiVRn tracking,
+streaming performance and comfort still require target-device validation.
+
+This remains a source-informed recreation: enemy AI, projectile limits, bonus
+cadence, camera motion, modern RGB colors and effects are adapted rather than
+cycle/pixel-identical Jaguar emulation. Original Classic/Plus/two-player modes,
+EEPROM key algorithms and the original raster art/font pipeline remain outside
+this implementation.
