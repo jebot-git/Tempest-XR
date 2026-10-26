@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Name=Tempest XR
+Comment=Bundled de-xr arcade experience for desktop and native OpenXR
+Exec=@CMAKE_INSTALL_PREFIX@/bin/tempest-xr
+TryExec=@CMAKE_INSTALL_PREFIX@/bin/tempest-xr
+Icon=org.de_xr.TempestXR
+Terminal=false
+Categories=Game;ArcadeGame;
+StartupNotify=true
+StartupWMClass=org.de_xr.TempestXR
+X-DomeD-Bundled=true
+X-DomeD-NativeXR=true
+Actions=Desktop;NativeXR;Stereo;
+
+[Desktop Action Desktop]
+Name=Play on desktop
+Exec=@CMAKE_INSTALL_PREFIX@/bin/tempest-xr --desktop
+
+[Desktop Action NativeXR]
+Name=Play in native OpenXR
+Exec=@CMAKE_INSTALL_PREFIX@/bin/tempest-xr --xr
+
+[Desktop Action Stereo]
+Name=Stereo preview
+Exec=@CMAKE_INSTALL_PREFIX@/bin/tempest-xr --desktop --stereo

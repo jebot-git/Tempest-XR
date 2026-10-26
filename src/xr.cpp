@@ -27,7 +27,7 @@ struct XR::Impl {
     XrSession session = XR_NULL_HANDLE;
     XrSpace space = XR_NULL_HANDLE;
     XrSystemId system = XR_NULL_SYSTEM_ID;
-    bool running = false, hasAnchor = false, quit = false, isFocused = false;
+    bool running = false, hasAnchor = false, quit = false, isFocused = false, visible = true;
     XrEnvironmentBlendMode blend = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
     struct Eye {
         XrSwapchain chain = XR_NULL_HANDLE;
@@ -280,7 +280,7 @@ bool XR::frame(Renderer &renderer, const Game &game) {
     XrViewState vs{XR_TYPE_VIEW_STATE};
     uint32_t n = 0;
     XR_CHECK(xrLocateViews(x.session, &li, &vs, 2, &n, views.data()));
-    bool render = fs.shouldRender && n == 2 &&
+    bool render = x.visible && fs.shouldRender && n == 2 &&
                   (vs.viewStateFlags & XR_VIEW_STATE_POSITION_VALID_BIT) &&
                   (vs.viewStateFlags & XR_VIEW_STATE_ORIENTATION_VALID_BIT);
     if (render) {
@@ -361,6 +361,7 @@ bool XR::frame(Renderer &renderer, const Game &game) {
         x.stereoFrames++;
     return true;
 }
+void XR::setVisible(bool visible) { p->visible=visible; }
 void XR::recenter() {
     p->hasAnchor = false;
 }
@@ -382,6 +383,7 @@ void XR::initialize(SDL_Window *) {
 bool XR::frame(Renderer &, const Game &) {
     return false;
 }
+void XR::setVisible(bool) {}
 void XR::recenter() {}
 bool XR::focused() const {
     return false;

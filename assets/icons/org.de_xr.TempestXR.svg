@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#51efff"/><stop offset="1" stop-color="#9d58ff"/></linearGradient>
+    <radialGradient id="night"><stop stop-color="#192253"/><stop offset="1" stop-color="#080b1c"/></radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#night)" stroke="#28345b" stroke-width="2"/>
+  <g fill="none" stroke-linejoin="round">
+    <path d="M128 28 216 76 216 170 128 218 40 170 40 76Z" stroke="url(#rim)" stroke-width="9"/>
+    <path d="M128 65 185 96 185 157 128 189 71 157 71 96Z" stroke="#695ee6" stroke-width="4"/>
+    <path d="M128 96 158 113 158 146 128 163 98 146 98 113Z" stroke="#a14bdf" stroke-width="3"/>
+    <path d="m128 28 0 94m88-46-58 37m58 57-58-24m-30 72 0-55m-88 7 58-24M40 76l58 37" stroke="#458eda" stroke-width="3"/>
+    <path d="m128 115 12 7v14l-12 7-12-7v-14Z" stroke="#df5aff" stroke-width="3"/>
+  </g>
+  <path d="m84 184 28-21 16 24 16-24 28 21-23 32-21 13-21-13Z" fill="#070d1c" stroke="#ddff52" stroke-width="9" stroke-linejoin="round"/>
+  <path d="m110 191 18 19 18-19" fill="none" stroke="#6dffb2" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="m204 42 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z" fill="#e6fcff"/>
+</svg>

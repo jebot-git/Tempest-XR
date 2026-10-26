@@ -17,6 +17,7 @@ class XR {
     void initialize(SDL_Window *window);
     bool frame(Renderer &renderer, const Game &game);
     void recenter();
+    void setVisible(bool visible);
     bool focused() const;
     std::string description() const;
 };

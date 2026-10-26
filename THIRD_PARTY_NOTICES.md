@@ -38,3 +38,9 @@ payloads in the pinned repository's `src/sounds/samples/` directory, using its
 sample metadata. Original sound/voice rights remain with their respective
 owners. The effect manifest records raw payload hashes, source URLs and nominal
 rates. This repository does not assert a new license grant for original assets.
+
+The test-only OpenXR API fixture in `tests/mock-openxr.cpp` adapts the de-xr
+Comic Chat mock runtime, under the MIT license reproduced in
+`tests/MOCK_RUNTIME_LICENSE.txt`. It is not installed with the game. The native
+DomeD link uses the system libcurl and nlohmann-json libraries; no copies of
+those libraries are bundled by this project's installer.

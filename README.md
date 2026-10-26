@@ -10,12 +10,12 @@ SDL2 and OpenGL implementation; no ROM, emulator or Jaguar toolchain is needed.
 
 ## Build and run
 
-Requires CMake 3.18+, a C++17 compiler, pkg-config, SDL2, OpenGL/EGL, X11 and the
-OpenXR loader development packages. On Debian/Ubuntu:
+Requires CMake 3.18+, a C++17 compiler, pkg-config, SDL2, OpenGL/EGL, X11,
+libcurl, nlohmann-json and the OpenXR loader development packages. On Debian/Ubuntu:
 
 ```sh
 sudo apt install build-essential cmake pkg-config libsdl2-dev libgl-dev \
-  libegl-dev libx11-dev libopenxr-dev libopenmpt0
+  libegl-dev libx11-dev libopenxr-dev libcurl4-openssl-dev nlohmann-json3-dev libopenmpt0
 cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build --parallel
 ./build/tempest-xr
@@ -23,7 +23,9 @@ cmake --build build --parallel
 
 `libopenmpt0` is optional for tracker music; its development headers are
 unnecessary. A desktop build can omit OpenXR with `-DTEMPEST_OPENXR=OFF`.
-Install with `cmake --install build --prefix PREFIX`.
+Configure `-DCMAKE_INSTALL_PREFIX=PREFIX`, then install with `cmake --install build`.
+The icon, desktop entry, music and effects install together. DomeD's default
+bundled-experience staging builds a pinned Release revision of this project.
 
 ## Controls
 
@@ -40,7 +42,9 @@ wheel input accumulates; closed webs wrap, and open webs stop at their ends.
 | Enter | Start/retry; start a new campaign after victory |
 | P / Escape | Pause/resume; Escape returns game-over/victory to title |
 | F | Toggle automatic fire |
-| V | Enter/leave native OpenXR |
+| V | Enter native OpenXR / return the game to desktop |
+| Alt+Tab | Pause native XR and restore the previous DomeD desktop |
+| Click / Enter while paused | Resume play after returning to the game |
 | R | Recenter the XR rig |
 | B | Half-SBS preview using the XR camera |
 | [ / ] | Wheel sensitivity, 0.25–4 lanes per detent |
@@ -106,10 +110,26 @@ one; the flight joins its starting lane before resetting the world origin.
 OpenXR predicted eye poses/FOVs remain layered onto the moving rig. A full-sphere
 background fills every head direction, with animated ring/sine patterns.
 
-Keep the SDL host window focused for mouse input. XR controller bindings and
-DomeD overlay/automatic stereo registration are not implemented. The desktop
-companion shows an overview; B selects a stereo camera preview. Lost XR focus
-freezes gameplay/audio; runtime loss returns to desktop and pauses. Wayland uses
+In DomeD, the validated launch socket determines the default mode: launch from
+XR to enter native OpenXR immediately, or from desktop for desktop play.
+`--desktop` and `--xr` explicitly override the launch realm. V transfers a running
+desktop game into native XR and returns an XR game to a focused desktop window.
+
+Native XR uses DomeD's reversible handoff API: the compositor hides its XR
+desktop and both bars and routes keyboard, wheel and mouse buttons to the game,
+independent of pointer location. Alt+Tab remains a system escape: gameplay and
+audio pause, the game's OpenXR session closes, mouse capture releases, and the
+previous bar visibility, desktop, workspace and focus return. Other windows keep
+their geometry. Select Tempest XR in the taskbar to reopen its native XR view;
+click or Enter resumes play. Exit, client death and a lost heartbeat also restore
+the desktop. An older DomeD is rejected before starting native XR, so updating
+the compositor requires a new DomeD session without restarting an active session
+as part of installation.
+
+Outside DomeD, ordinary desktop and explicit `--xr` modes remain available.
+XR controller bindings are not implemented. The desktop companion shows an
+overview; B selects a stereo camera preview. Runtime loss returns to desktop and
+pauses. Wayland uses
 EGL plus `XR_MNDX_egl_enable`; X11 can use GLX. Missing runtime/headset support
 leaves desktop play available and prints the reason.
 
@@ -160,7 +180,19 @@ The native XR fixture uses a private runtime directory and leaves the system
 runtime unchanged. It exercises effects/late-jump warp, enemy roster and all
 three bonus families in actual OpenXR sessions.
 
-Useful flags: `--level 1..100`, `--demo` (autoplay), `--frames N`,
+DomeD handoff integration can be tested without connecting to a real headset:
+
+```sh
+python3 tools/test_domed.py --compositor ../DomeD/target/release/dome-compositor
+```
+
+This runs the real game in a private Wayland compositor with a test-only OpenXR
+API runtime. It verifies launch modes, physical wheel capture, pause/restoration,
+returning to XR, desktop toggling, client death and stopped-thread expiry.
+`--report diagnostics.json` writes aggregate launch/pause/input/render results;
+it does not log keys or lease tokens.
+
+Useful flags: `--desktop`, `--level 1..100`, `--demo` (autoplay), `--frames N`,
 `--capture image.ppm`, `--no-audio`, `--help`. Physical headset/WiVRn tracking,
 streaming performance and comfort still require target-device validation.
 

@@ -1,4 +1,6 @@
 #include "audio.hpp"
+#include "domed.hpp"
+#include <nlohmann/json.hpp>
 #include "game.hpp"
 #include "render.hpp"
 #include "xr.hpp"
@@ -70,7 +72,7 @@ int main(int argc, char **argv) {
          warpDemo = false, effectsDemo = false, enemyDemo = false, explicitLevel = false;
     int bonusDemo = -1;
     int frameLimit = 0, startingLevel = 1;
-    std::string capture, musicDirectory;
+    std::string capture, musicDirectory, launchMode="auto", reportPath;
     try {
         for (int i = 1; i < argc; i++) {
             std::string arg = argv[i];
@@ -79,10 +81,11 @@ int main(int argc, char **argv) {
                     throw std::runtime_error("Missing value after " + arg);
                 return std::string(argv[++i]);
             };
-            if (arg == "--xr")
-                wantXR = true;
+            if (arg == "--xr") {wantXR = true;launchMode="xr";}
+            else if (arg == "--desktop") {wantXR=false;launchMode="desktop";}
             else if (arg == "--stereo")
                 sbs = true;
+            else if (arg == "--report") reportPath=value();
             else if (arg == "--demo")
                 demo = true;
             else if (arg == "--warp-demo")
@@ -113,10 +116,10 @@ int main(int argc, char **argv) {
                 startingLevel = 4;
             } else if (arg == "--help") {
                 std::cout
-                    << "Tempest XR prototype\nUsage: tempest-xr [--xr] [--stereo] [--level 1..100] "
+                    << "Tempest XR\nUsage: tempest-xr [--xr|--desktop] [--stereo] [--level 1..100] "
                        "[--no-audio] [--no-music] [--music-dir DIR]\n       [--demo] [--warp-demo] "
                        "[--effects-demo] [--enemy-demo] [--bonus-demo 0..2] [--frames N] "
-                       "[--capture image.ppm] "
+                       "[--capture image.ppm] [--report diagnostics.json] "
                        "[--smoke-test image.ppm]\n\nWheel: move | LMB: fire | RMB: Superzapper | "
                        "MMB/Space: jump\nEnter: start/retry | P/Esc: pause | F: automatic fire | "
                        "V: toggle OpenXR\nB: half-SBS preview | R: recenter XR | F11: "
@@ -126,6 +129,15 @@ int main(int argc, char **argv) {
             } else
                 throw std::runtime_error("Unknown argument: " + arg);
         }
+        // Tests with an explicit offscreen driver never attach to a live session.
+        bool offscreen=getenv("SDL_VIDEODRIVER") && std::string(getenv("SDL_VIDEODRIVER"))=="offscreen";
+        DomeLaunch launch=offscreen?DomeLaunch{}:domeLaunch(launchMode);
+        if(launchMode=="auto" && launch.managed)wantXR=launch.xr;
+        DomeLink dome(launch);
+        SDL_SetHint(SDL_HINT_APP_NAME,"Tempest XR");
+        SDL_SetHint("SDL_APP_ID","org.de_xr.TempestXR");
+        SDL_SetHint("SDL_VIDEO_WAYLAND_WMCLASS","org.de_xr.TempestXR");
+        SDL_SetHint("SDL_VIDEO_X11_WMCLASS","org.de_xr.TempestXR");
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0)
             throw std::runtime_error(SDL_GetError());
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -134,7 +146,7 @@ int main(int argc, char **argv) {
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         auto window = std::unique_ptr<SDL_Window, decltype(&SDL_DestroyWindow)>(
-            SDL_CreateWindow("TEMPEST 2000 / XR - source study", SDL_WINDOWPOS_CENTERED,
+            SDL_CreateWindow("Tempest XR", SDL_WINDOWPOS_CENTERED,
                              SDL_WINDOWPOS_CENTERED, 1440, 900,
                              SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI),
             SDL_DestroyWindow);
@@ -178,25 +190,44 @@ int main(int argc, char **argv) {
         }
         std::unique_ptr<XR> xr;
         std::string status = "DESKTOP / WHEEL CONTROL / 37 ORIGINAL WEB SHAPES";
-        auto toggleXR = [&]() {
-            if (xr) {
-                xr.reset();
-                SDL_GL_SetSwapInterval(1);
-                status = "DESKTOP / XR SESSION CLOSED";
-                return;
-            }
+        bool xrIntent=false,captured=false,everFocused=false;
+        int xrEntries=0,xrSuspends=0,pausedSuspends=0,wheelEvents=0;
+        auto captureInput=[&](bool enabled){
+            SDL_SetWindowMouseGrab(window.get(),enabled?SDL_TRUE:SDL_FALSE);
+            SDL_SetRelativeMouseMode(enabled?SDL_TRUE:SDL_FALSE);
+            SDL_ShowCursor(enabled?SDL_DISABLE:SDL_ENABLE);captured=enabled;
+        };
+        auto suspendXR=[&](){
+            if(game.mode==Mode::Playing||game.mode==Mode::Transition||game.mode==Mode::Bonus)game.pause();
+            ++xrSuspends;if(game.mode==Mode::Paused)++pausedSuspends;
+            game.fireHeld=false;game.bonusUp=game.bonusDown=false;
+            if(xr)xr->setVisible(false);
+            captureInput(false);xr.reset();dome.suspend();SDL_GL_SetSwapInterval(1);
+            status="XR PAUSED / SELECT TEMPEST XR TO RETURN / CLICK OR ENTER TO RESUME";
+        };
+        auto enterXR = [&]() {
             try {
+                dome.ready();
                 auto candidate = std::make_unique<XR>();
                 candidate->initialize(window.get());
-                xr = std::move(candidate);
+                dome.begin();
+                xr = std::move(candidate);xrIntent=true;everFocused=false;++xrEntries;
+                captureInput(true);
                 SDL_GL_SetSwapInterval(0);
                 status = "OPENXR / " + xr->description() + " / R TO RECENTER";
             } catch (const std::exception &e) {
+                dome.end();captureInput(false);xrIntent=false;
                 std::cerr << "XR unavailable: " << e.what() << '\n';
                 status = std::string("XR UNAVAILABLE - DESKTOP ACTIVE / ") + e.what();
                 if (status.size() > 110)
                     status.resize(110);
             }
+        };
+        auto toggleXR = [&]() {
+            if(xrIntent){
+                xrIntent=false;captureInput(false);xr.reset();dome.end(true);
+                SDL_RaiseWindow(window.get());SDL_GL_SetSwapInterval(1);status="DESKTOP / XR SESSION CLOSED";
+            }else enterXR();
         };
         SDL_GL_SetSwapInterval(frameLimit ? 0 : 1);
         if (wantXR)
@@ -267,13 +298,16 @@ int main(int argc, char **argv) {
                     event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
                     game.fireHeld = false;
                     game.bonusUp = game.bonusDown = false;
-                    if (!xr &&
-                        (game.mode == Mode::Playing || game.mode == Mode::Transition ||
-                         game.mode == Mode::Bonus) &&
-                        !frameLimit)
-                        game.pause();
+                    // DomeD's lease is authoritative; transient queued SDL focus
+                    // changes during capture must not start a suspend/resume loop.
+                    if(xr && captured && !dome.managed()) suspendXR();
+                    else if(!xr && (game.mode==Mode::Playing||game.mode==Mode::Transition||game.mode==Mode::Bonus) && !frameLimit)game.pause();
+                }
+                if(event.type==SDL_WINDOWEVENT && event.window.event==SDL_WINDOWEVENT_FOCUS_GAINED && xrIntent && !captured){
+                    if(dome.focused())enterXR();
                 }
                 if (event.type == SDL_MOUSEWHEEL) {
+                    ++wheelEvents;
                     float delta = event.wheel.preciseY;
                     if (delta == 0)
                         delta = float(event.wheel.y);
@@ -283,6 +317,7 @@ int main(int argc, char **argv) {
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     if (event.button.button == SDL_BUTTON_LEFT) {
+                        if(game.mode==Mode::Paused)game.pause();
                         if (game.isBonus()) {
                             game.bonusUp = true;
                             continue;
@@ -322,6 +357,8 @@ int main(int argc, char **argv) {
                     auto key = event.key.keysym.sym;
                     if (key == SDLK_q && (event.key.keysym.mod & KMOD_CTRL))
                         quit = true;
+                    if(key==SDLK_TAB && (event.key.keysym.mod & KMOD_ALT) && xr) {suspendXR();continue;}
+                    if(key==SDLK_RETURN && game.mode==Mode::Paused)game.pause();
                     if (key == SDLK_RETURN &&
                         (game.mode == Mode::Menu || game.mode == Mode::GameOver ||
                          game.mode == Mode::Victory))
@@ -419,9 +456,11 @@ int main(int argc, char **argv) {
                 if (frame == 270)
                     game.jump();
             }
+            if(xr && captured && dome.suspended())suspendXR();
+            if(xr)xr->setVisible(captured && dome.active());
             accumulator += frameLimit ? 1. / 60. : std::min(elapsed, .1);
             while (accumulator >= 1. / 120.) {
-                if (!xr || xr->focused())
+                if (!xr || (captured && dome.active() && xr->focused()))
                     game.tick(1.f / 120);
                 accumulator -= 1. / 120.;
             }
@@ -431,7 +470,7 @@ int main(int argc, char **argv) {
                 saveSettings();
             lastMode = game.mode;
             if (audio) {
-                audio->updateMusic(game, xr && !xr->focused());
+                audio->updateMusic(game, xrIntent && (!captured || !dome.active() || (xr && !xr->focused())));
                 for (auto sound : game.sounds)
                     audio->play(sound);
             }
@@ -439,13 +478,14 @@ int main(int argc, char **argv) {
             if (xr) {
                 try {
                     if (!xr->frame(renderer, game)) {
-                        xr.reset();
+                        xrIntent=false;captureInput(false);dome.end(true);xr.reset();
                         if (game.mode == Mode::Playing || game.mode == Mode::Transition ||
                             game.mode == Mode::Bonus)
                             game.pause();
                         status = "XR SESSION ENDED / DESKTOP ACTIVE";
                         SDL_GL_SetSwapInterval(1);
-                    }
+                    } else if(xr->focused())everFocused=true;
+                    else if(everFocused && captured)suspendXR();
                 } catch (const std::exception &e) {
                     std::cerr << "XR session ended: " << e.what() << '\n';
                     xr.reset();
@@ -491,7 +531,10 @@ int main(int argc, char **argv) {
                 throw std::runtime_error("Smoke validation failed");
         }
         saveSettings();
-        xr.reset();
+        if(!reportPath.empty())std::ofstream(reportPath)<<nlohmann::json{{"managed",dome.managed()},{"launch_xr",launch.xr},
+            {"xr_entries",xrEntries},{"xr_suspends",xrSuspends},{"paused_suspends",pausedSuspends},
+            {"wheel_events",wheelEvents},{"paused",game.mode==Mode::Paused},{"gl_error",error}}.dump(2)<<'\n';
+        captureInput(false);dome.end();xr.reset();
         audio.reset();
         renderer.releaseGL();
         SDL_GL_DeleteContext(context);
