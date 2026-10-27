@@ -36,7 +36,9 @@ enum class Kind {
     Adroid,
     Beast,
     EnemyShot,
-    PulsarSpark
+    PulsarSpark,
+    MirrorShot,
+    BeastShot
 };
 enum class Sound {
     Shot,
@@ -59,19 +61,31 @@ enum class Sound {
     ClearanceEngine,
     BonusToken,
     FlipperLand,
-    TankerOpen
+    TankerOpen,
+    MirrorReflect
 };
+enum class SpikerMotion { Seeking, Climbing, Descending };
+enum class FuseMotion { Climbing, Crossing };
+enum class DroidMotion { Climbing, Starting, Crossing, Zapping };
 enum class FlipperMotion { Climbing, Turning, Stopped };
 struct Enemy {
     Kind kind;
     int lane;
-    float depth = 1, age = 0, flip = 0;
+    float depth = 1, age = 0;
     int direction = 1;
     bool rim = false, dead = false;
-    bool retreating = false, emerging = false;
+    bool emerging = false;
     int hp = 1;
-    float firing = 0, sparkTime = 5.f / 60;
+    float sparkTime = 5.f / 60;
     FlipperMotion motion = FlipperMotion::Climbing;
+    SpikerMotion spikerMotion = SpikerMotion::Seeking;
+    FuseMotion fuseMotion = FuseMotion::Climbing;
+    DroidMotion droidMotion = DroidMotion::Climbing;
+    double aiClock = 0, fireClock = 0;
+    int buildFrames = 50, riseFrames = 48, crossFrames = 1, crossSteps = 15;
+    int droidFrames = 2, droidSteps = 16, zapFrames = 32, scarper = 0;
+    int travelFrom = -1, travelTo = -1;
+    bool runningBelowRim = false;
     int turnFrom = -1;
     float turnAngle = 0, turnArc = 128, stopTime = 0;
 };
@@ -121,6 +135,7 @@ class Game {
     std::array<int, 3> bonusRuns{};
     float bonusCheckTime = 0, bonusResultTime = 0;
     bool lastPulse = false;
+    int alienFireCounter = 112;
     struct TunnelPattern {
         int x, vx, y, vy;
         uint16_t phase, phaseStep, density, densityStep;
@@ -148,6 +163,11 @@ class Game {
     void beginFlipperTurn(Enemy &e, int direction);
     void openTanker(Enemy &e, std::vector<Enemy> &children);
     float flipRotation(const Enemy &e) const;
+    static Enemy makeEnemy(Kind kind, int lane, float depth, int direction);
+    float enemySpeed(Kind kind) const;
+    void beginFuseCrossing(Enemy &e, int direction);
+    void tickSpecialEnemy(Enemy &e, float dt);
+    void tryAlienFire(Enemy &e, float dt, std::vector<Enemy> &children);
 
   public:
     Mode mode = Mode::Menu;
@@ -156,8 +176,8 @@ class Game {
     int targetLevel = 2, enemiesRemaining = 0, waveSize = 0, unlockedLevel = 1, selectedLevel = 1;
     int powerupStage = 0, bonusTokens = 0, bonusType = 0, bonusGate = 0, bonusHits = 0,
         bonusesPlayed = 0;
-    float time = 0, waveTime = 0, visualLane = 0, jumpTime = 0, jumpCooldown = 0, invulnerable = 0,
-          flash = 0;
+    double waveTime = 0;
+    float time = 0, visualLane = 0, jumpTime = 0, jumpCooldown = 0, invulnerable = 0, flash = 0;
     bool autoFire = true, fireHeld = false, boost = false;
     bool jumpEnabled = false, droidActive = false, bonusUp = false, bonusDown = false,
          bonusWon = false, bonusFinished = false;
@@ -188,7 +208,18 @@ class Game {
     std::string message;
     std::vector<Enemy> enemies;
     std::vector<Shot> shots;
-    std::vector<float> spikes; // Lane tip depth; 1 means no spike.
+    std::vector<float> spikes; // Lane tip depth; 1 means absent unless spikePresent is set.
+    std::vector<bool> spikePresent, superSpikes;
+    bool hasSpike(int l) const {
+        return spikePresent[size_t(l)] || spikes[size_t(l)] < 1;
+    }
+    static bool reflected(Kind kind) {
+        return kind == Kind::MirrorShot || kind == Kind::BeastShot;
+    }
+    int pulsePhase() const;
+    float shotSpeed() const {
+        return (boost ? 4.5f : 3.5f) * 60 / 160;
+    }
     std::vector<Particle> particles;
     std::vector<Sound> sounds;
     explicit Game(uint32_t seed = 2000);

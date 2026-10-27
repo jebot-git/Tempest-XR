@@ -21,7 +21,6 @@ static Game setup(int level = 1) {
 static Enemy rim(const Game &g, int offset = 0, Kind kind = Kind::Flipper) {
     Enemy e{kind, g.boundedLane(g.lane + offset), 0};
     e.rim = true;
-    e.firing = 10;
     return e;
 }
 static int count(const Game &g, Kind kind) {
@@ -210,7 +209,6 @@ int main() {
             g.lane = 2;
             Enemy e{Kind::Flipper, 0, 0};
             e.rim = true;
-            e.firing = 10;
             g.enemies = {e};
             g.tick(dt);
             CHECK(g.enemies[0].lane == 1);
@@ -242,7 +240,6 @@ int main() {
                 auto g = setup();
                 g.boost = weapon == 1;
                 Enemy behind{Kind::Flipper, g.lane, .04f};
-                behind.firing = 10;
                 g.enemies = {behind, rim(g)};
                 if (reverse)
                     std::reverse(g.enemies.begin(), g.enemies.end());
@@ -302,7 +299,6 @@ int main() {
                 g.lane = target;
                 Enemy e{Kind::Flipper, from, 0};
                 e.rim = true;
-                e.firing = 10;
                 g.enemies = {e};
                 g.tick(dt);
                 CHECK(g.enemies[0].lane == target);

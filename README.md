@@ -77,9 +77,13 @@ pulse and powerup-delay tables drive progression, with victory after wave 100.
 
 The generator roster includes flippers, three tanker variants, spikers,
 fuseballs, pulsars, two super-flipper variants, mirrors, hostile droids
-and beasts. Tankers release their corresponding pairs. Pulsars electrify lanes
-and split into propagating rim sparks; fuseballs pursue the ship along rails;
-super flippers take one valid hit. Enemy projectiles and a
+and beasts. Tankers release their corresponding pairs. Pulsars electrify lanes only in phase seven and split into bouncing rim sparks.
+Fuseballs pursue the ship through timed rail crossings and can be shot only
+near the crossing center. Spikers choose clear/shortest spikes, build and
+retreat; super spikes stop normal shots. Super flippers take one valid hit.
+Mirrors convert shots into rings; beasts shed absorbing reflected parts.
+Hostile droids deflect shots while climbing, then patrol above the rim and zap;
+jump and fire to reach them. Enemy projectiles and a
 separately acquired friendly firing droid are implemented. Flippers climb to
 the rim before turning toward the ship. Their turning animation and shot
 vulnerability share the source angle state: a correctly timed shot can kill
@@ -210,7 +214,8 @@ SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
 python3 tools/test_xr.py              # Optional Monado simulated HMD + compatible GPU
 ```
 
-Tests cover timed rim shots/capture, angular windows, impact ordering, the three audited regressions, enemy behaviors, all 100 generation
+Tests cover timed rim shots/capture, angular windows, impact ordering,
+wave clearance, enemy state boundaries, shot budgets and all 100 generation
 budgets, powerup/droid progression, both zaps, bonus success/failure and victory.
 Tests complete all 24 bonus courses using public wheel/button controls, and
 verify projectile interception, continuous bonus boundaries and death/respawn.
@@ -240,9 +245,11 @@ Useful flags: `--desktop`, `--level 1..100`, `--demo` (autoplay), `--frames N`,
 `--capture image.ppm`, `--no-audio`, `--help`. Physical headset/WiVRn tracking,
 streaming performance and comfort still require target-device validation.
 
-This remains a source-informed recreation: enemy AI, projectile limits, bonus
-inertia, camera motion, modern RGB polygon shading and mixing are adapted rather
-than cycle/pixel-identical Jaguar emulation. The original gate layout, delay and
+This remains a source-informed recreation. Enemy state machines and original
+tunnel rules are translated, with focused regressions. Full object-slot
+allocation, friendly-droid patrol, rare pickups, individual effect lifecycles,
+ending flows and music fade remain incomplete. Camera motion, mouse gain,
+modern RGB shading and mixing are adapted for desktop/XR. The original gate layout, delay and
 modifier data drive the bonus implementation, with source-based first-ring approach timing. The tunnel translates the original green-track/trail rules, pattern generators,
 64-segment buffer and continuous score; its geometry, colors and mouse gain are
 adapted for desktop/XR. See the behavior audit.

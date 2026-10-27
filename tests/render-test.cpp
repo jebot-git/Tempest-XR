@@ -140,6 +140,10 @@ int main() {
             game.autoFire = false;
             for (int type = 0; type < 12; type++)
                 game.spawn(Game::kindForSource(type), type % game.web.lanes(), .4f);
+            game.spawn(Kind::MirrorShot, 0, .3f);
+            game.spawn(Kind::BeastShot, 2, .4f);
+            game.superSpikes[3] = true;
+            game.spikes[3] = .5f;
             game.droidActive = true;
             for (float age : {0.f, .11f, .22f, .33f}) {
                 for (auto &enemy : game.enemies)

@@ -40,6 +40,8 @@ static Color enemyColor(Kind kind) {
         return {1, .1f, .1f};
     case Kind::Beast:
         return {1, .15f, .8f};
+    case Kind::MirrorShot:
+    case Kind::BeastShot:
     case Kind::EnemyShot:
         return {1, .35f, .2f};
     }
@@ -389,12 +391,40 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
     case Kind::Adroid:
         original = "adroid";
         break;
-    case Kind::Beast: {
-        static const char *frames[] = {"hornm1", "hornm2", "hornm3", "hornm2"};
-        original = frames[int(e.age * 10) % 4];
+    case Kind::Beast:
+        mesh("hornm1", p, tangent, normal, s, c);
+        if (e.hp >= 2)
+            mesh("hornm2", p, tangent, normal, s, c);
+        if (e.hp >= 3)
+            mesh("hornm3", p, tangent, normal, s, c);
+        return;
+    case Kind::MirrorShot: {
+        // ringbull's original 15x15 raster, repeated in Z by the Jaguar rex effect.
+        const auto *atlas = rasterAtlas("pic2");
+        if (atlas) {
+            glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT | GL_COLOR_BUFFER_BIT);
+            glEnable(GL_TEXTURE_2D);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glBindTexture(GL_TEXTURE_2D, atlas->texture);
+            glBegin(GL_QUADS);
+            for (int trail = 2; trail >= 0; --trail) {
+                glColor4f(1, 1, 1, 1 - float(trail) * .3f);
+                for (auto xy : {std::pair{0, 0}, {1, 0}, {1, 1}, {0, 1}}) {
+                    glTexCoord2f(float(215 + xy.first * 15) / atlas->width,
+                                 float(115 + xy.second * 15) / atlas->height);
+                    Vec3 v = point(float(xy.first * 3) - 1.5f, 1.5f - float(xy.second * 3));
+                    glVertex3f(v.x, v.y, v.z - float(trail) * .06f);
+                }
+            }
+            glEnd();
+            glPopAttrib();
+        }
+        return;
     }
-
-    break;
+    case Kind::BeastShot:
+        original = e.hp == 2 ? "hornm2" : "hornm3";
+        break;
     case Kind::EnemyShot:
         original = "pshot";
         break;
@@ -402,9 +432,10 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
         break;
     }
     if (e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark) {
-        static const char *frames[] = {"spuls6", "spuls6", "spuls6", "spuls5",
-                                       "spuls4", "spuls3", "spuls2", "spuls1"};
-        original = frames[int(g.waveTime * 8) % 8];
+        static const char *frames[] = {"spuls6", "spuls6", "spuls6", "spuls5", "spuls4", "spuls3",
+                                       "spuls2", "spuls1", "spuls1", "spuls2", "spuls3", "spuls4",
+                                       "spuls5", "spuls6", "spuls6", "spuls6"};
+        original = frames[g.pulsePhase()];
     }
     if (e.kind == Kind::Fuseball) {
         for (int arm = 0; arm < 4; arm++)
@@ -918,7 +949,7 @@ void Renderer::world(const Game &g, bool headset) {
         if (!e.dead) {
             enemy(g, e);
             if (((e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark) && g.pulseActive()) ||
-                (e.kind == Kind::Adroid && e.rim && std::fmod(e.age, 2.f) > .9f)) {
+                (e.kind == Kind::Adroid && e.droidMotion == DroidMotion::Zapping)) {
                 Color c = enemyColor(e.kind);
                 c.a = .9f;
                 line(g.edge(e.lane, 0), g.edge(e.lane, 1), c);
@@ -947,18 +978,15 @@ void Renderer::world(const Game &g, bool headset) {
         }
     }
     for (int i = 0; i < n; i++) {
-        if (g.spikes[size_t(i)] < .99f) {
-            line(g.position(float(i), g.spikes[size_t(i)]), g.position(float(i), 1), amber);
+        if (g.hasSpike(i)) {
+            line(g.position(float(i), g.spikes[size_t(i)]), g.position(float(i), 1),
+                 g.superSpikes[size_t(i)] ? spectrum(g.time * 3) : amber);
         }
     }
     if (g.mode == Mode::Menu) {
         for (int i = 0; i < 9; i++) {
-            Enemy e{Kind(i % 3),
-                    (i * 3 + 1) % n,
-                    .12f + std::fmod(float(i) * .14f + g.time * .035f, .85f),
-                    0,
-                    g.time,
-                    1};
+            Enemy e{Kind(i % 3), (i * 3 + 1) % n,
+                    .12f + std::fmod(float(i) * .14f + g.time * .035f, .85f), g.time};
             enemy(g, e);
         }
     }

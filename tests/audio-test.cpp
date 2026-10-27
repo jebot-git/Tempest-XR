@@ -70,6 +70,10 @@ struct AudioProbe {
         CHECK(std::abs(audio.voices[0].step -
                        float(effectStep(60)) / effectStep(sourceSamples[17].pitch)) < .0001f);
         audio.voices = {};
+        audio.play(Sound::MirrorReflect);
+        CHECK(audio.voices[0].sample == 19 && audio.voices[0].priority == 3);
+        CHECK(audio.voices[1].remaining == 0);
+        audio.voices = {};
         audio.play(Sound::OneUp);
         CHECK(audio.voices[0].remaining > 0 && audio.voices[1].remaining == 0);
         audio.voices = {};

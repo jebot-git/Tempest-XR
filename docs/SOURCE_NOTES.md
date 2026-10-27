@@ -9,10 +9,10 @@ Jeff Minter / Atari. Source preservation/annotations: upstream contributors.
 | `web1` … `web37`, `raw_webs`, `sweb` | Original outlines, topology and spawn lanes. Tempest 2000 selects index `16 + ((level-1)&31)` from the shared 48-entry table. |
 | `_nw1` … `_nw100`, `setnewgen`, `newgen`, `inits` | All original generation budgets and independent spawn periods. First spawn waits half a period; each subsequent spawn waits a full period. |
 | `fz_stuff`, `tz_stuff`, `sz_stuff`, `fuz_stuff`, `pudels`, `pup_stuff` | Original speed, pulse and pickup-delay tables. |
-| `run_flipper`, `flipmodes`, `make_sflip2/3`, `make_beast` | Straight climb, source-angle rim turns/shot windows, pursuit, stopped pauses and landing sample; shield/ricochet and special beast states remain adapted. |
-| `maketank`, `openflippers`, `openfuseballs`, `openpulsars` | Three tanker families release the corresponding pairs. |
-| `run_fuseball`, `climbrail`, `run_pulsar`, `run_pspark` | Rail pursuit, lane electrification and propagating rim sparks. |
-| `rumirr`, `refsht`, `run_adroid`, `run_ashot` | Mirrors, reflected/projectile fire and hostile droid hazards. |
+| `run_flipper`, `flipmodes`, `make_sflip2/3`, `make_beast` | Source-angle turns/windows, pause/landing cue, mode-2 rotation, mode-3 down-web flight/away-seeking and directed chains. Super flippers take one hit; beasts shed two reflected mesh parts. |
+| `maketank`, `openflippers`, `openfuseballs`, `openpulsars` | Rim/hit opening with paired sample 17, corresponding pairs and source child-entry states; reserved object slots remain adapted. |
+| `run_fuseball`, `climbrail`, `run_pulsar`, `run_pspark` | 49-frame rail ride, 16-step crossing/count-based vulnerability, source phase-7 electrification and contact-first timed rim sparks with bounce/wrap. |
+| `rumirr`, `refsht`, `run_adroid`, `run_ashot` | Mirror shot takeover/knockback, distinct full-/half-speed reflection rules, shared alien firing counter/cap and hostile-droid four-state patrol/shield/zap. |
 | `pupvex`, `hilaser`, `jenab`, `adenoid`, `sprzap`, `mkdroid` | Laser/points/jump/points/droid/token progression and friendly autonomous firing. Existing droids let the pickup sequence skip to the token. |
 | `fire`, `r_end1`, `szap_avail` | Full initial Superzapper followed by one-enemy emergency zap. Spikes survive both. |
 | `doscore`, `scores` | Centralized scoring and threshold awards, including wave and bonus score. |
@@ -131,3 +131,13 @@ The death sequence lasts 1.6 seconds with combat frozen. Source polygon faces
 scatter for an explosion, or a flipper carries the claw into the web. A smooth
 camera path returns to the same wave's starting rim before reloading it. Final
 life loss settles into Game Over without another camera discontinuity.
+
+Enemy translations use explicit phase/counter state in `src/enemies.cpp`, with
+normal/laser speeds and cadences from `sweb`/`hilaser`/`sclawr`. Spiker selection
+and building follow `newspike`/`climbspike`/`descendspike`; spike damage follows
+`colok`/`xle3`/`decspike`. In particular, a normal shot spatters harmlessly on a
+super spike, while a laser ring is consumed **and returns a shortening hit**.
+The reflected mirror ring uses the `ringbull` raster rectangle in `pic2`; shed
+beast parts retain the corresponding `hornm2`/`hornm3` meshes. The modern swept
+impact system and object collections do not reproduce Jaguar list allocation
+or every sub-frame ordering detail.

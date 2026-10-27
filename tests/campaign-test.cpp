@@ -171,13 +171,13 @@ int main() {
         g.autoFire = false;
         g.lane = 6;
         g.spawn(Kind::Fuseball, 0, .8f);
-        step(g, .6f);
+        step(g, 1.36f);
         CHECK(g.enemies[0].lane == 1);
         CHECK(g.enemies[0].depth < .8f);
         g.start();
         g.autoFire = false;
         g.invulnerable = 0;
-        g.waveTime = 1.8f;
+        g.waveTime = 1.06f;
         g.spawn(Kind::Pulsar, g.lane, .8f);
         CHECK(g.pulseActive());
         g.tick(.01f);
@@ -194,7 +194,7 @@ int main() {
             g.shots = {{0, .59f, .58f}};
             g.tick(.01f);
             CHECK(count(g, kind) == (kind == Kind::Mirror ? 1 : 0));
-            CHECK(count(g, Kind::EnemyShot) == (kind == Kind::Mirror ? 1 : 0));
+            CHECK(count(g, Kind::MirrorShot) == (kind == Kind::Mirror ? 1 : 0));
             CHECK(g.score == (kind == Kind::Mirror ? 0 : 150));
         }
         g.start();
@@ -212,7 +212,7 @@ int main() {
         g.zap();
         CHECK(g.zaps == 1);
         g.tick(.01f);
-        CHECK(g.enemies.empty());
+        CHECK(g.enemies.size() == 1 && count(g, Kind::Mirror) == 1);
         g.spawn(Kind::Flipper, 0, .7f);
         g.spawn(Kind::Flipper, 1, .6f);
         g.zap();

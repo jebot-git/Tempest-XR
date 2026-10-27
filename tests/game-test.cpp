@@ -104,15 +104,18 @@ int main() {
         REQUIRE(g.web.name == "SQUARE");
         REQUIRE(g.zaps == 2);
         g.start(4);
-        g.enemies = {{Kind::Spiker, 3, .4f}};
-        g.tick(.01f);
+        g.spikes[3] = .4f;
+        Enemy spiker{Kind::Spiker, 3, .4f};
+        spiker.spikerMotion = SpikerMotion::Climbing;
+        g.enemies = {spiker};
+        g.tick(1.f / 60);
         REQUIRE(g.spikes[3] < .4f);
         g.zap();
         g.tick(.01f);
         REQUIRE(g.spikes[3] < .4f); // Superzapper leaves spikes behind.
         g.shots = {{3, .39f, .38f}};
         g.tick(.01f);
-        REQUIRE(g.spikes[3] > .45f);
+        REQUIRE(g.spikes[3] > .41f && g.spikes[3] < .42f);
         g.start();
         g.invulnerable = 0;
         g.enemiesRemaining = 0;
