@@ -134,12 +134,14 @@ void Game::steer(float notches) {
         return;
     }
     if (mode == Mode::Bonus) {
+        if (bonusFinished)
+            return;
         if (bonusType == 1) {
             tunnelVelocity = std::clamp(tunnelVelocity + notches * tunnelWheelGain, -6.f, 6.f);
             return;
         }
-        bonusX = std::clamp(bonusX + notches * .16f, -4.5f, 4.5f);
-        bonusAngle += notches * .19634954f;
+        bonusHorizontalVelocity += notches * ringWheelGain; // m7run: roach += rot_cum; iii.
+
         return;
     }
     if (mode != Mode::Playing && mode != Mode::Transition)
@@ -584,14 +586,18 @@ void Game::startBonus(int type) {
     bonusCourse = bonusRuns[size_t(bonusType)]++ % 8;
     bonusesPlayed++;
     bonusTime = 0;
-    bonusDistance = bonusImpulse = bonusEffectTime = 0;
+    bonusDistance = bonusEffectTime = 0;
+    bonusControlClock = 0;
+    bonusControlStarted = false;
+    bonusHorizontalVelocity = 0;
+    bonusVerticalVelocity = bonusType == 1 ? 0 : -bonusVerticalMax;
     bonusBoosts = bonusLastScore = 0;
     bonusSpeed =
         (bonusType == 2 ? 37.5f : 30.f) + float(bonusRuns[size_t(bonusType)] - 1) * .46875f;
     bonusGate = 0;
     bonusHits = 0;
     bonusX = bonusAngle = 0;
-    bonusY = bonusType == 1 ? 0.f : .25f / 32; // m7go initializes vp_y=$4000.
+    bonusY = bonusType == 1 ? 0.f : -.25f / 32; // Source Y points down; GL Y points up.
     droidActive = false;
     if (bonusType == 1)
         startTunnel();
@@ -649,7 +655,7 @@ Vec3 Game::bonusTarget(int gate) const {
     uint32_t packed = course[size_t(std::clamp(gate, 0, int(course.size()) - 2))];
     float x = float(int8_t((packed >> 16) & 255)) / 32.f,
           y = float(int8_t((packed >> 8) & 255)) / 32.f;
-    return {bonusType == 2 ? -x : x, y, 0};
+    return {bonusType == 2 ? -x : x, -y, 0};
 }
 Vec3 Game::bonusCursor() const {
     return bonusType == 1 ? Vec3{std::cos(bonusAngle) * 1.4f, std::sin(bonusAngle) * 1.4f, 0}
@@ -669,9 +675,7 @@ void Game::tickBonus(float dt) {
         tickTunnel(dt);
         return;
     }
-    bonusY = std::clamp(bonusY + (float(int(bonusUp) - int(bonusDown)) * 1.6f + bonusImpulse) * dt,
-                        -4.5f, 4.5f);
-    bonusImpulse *= std::exp(-6 * dt);
+    tickRotaryBonus(dt);
     bonusEffectTime = std::max(0.f, bonusEffectTime - dt);
     bonusDistance += bonusSpeed * dt;
     if (bonusDistance >= bonusGateDistance(bonusGate)) {
@@ -695,7 +699,7 @@ void Game::tickBonus(float dt) {
             bonusLastScore = 250;
         addScore(bonusLastScore);
         if (effect == 1 || effect == 2) {
-            bonusImpulse = effect == 1 ? 2.4f : -2.4f;
+            bonusVerticalVelocity = effect == 1 ? bonusVerticalMax : -bonusVerticalMax;
             announce(effect == 1 ? "UP IMPULSE" : "DOWN IMPULSE", .9f);
             bonusEffectTime = 1;
         } else if (effect == 3) {

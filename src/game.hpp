@@ -144,7 +144,9 @@ class Game {
                                                  {80, 9, 112, 15, 0x6000, 0x280, 0xc00, 0xc0}}};
     int tunnelPatternCountdown = 300, tunnelBend = 0;
     uint16_t tunnelPhase = 0;
-    double tunnelClock = 0;
+    double tunnelClock = 0, bonusControlClock = 0;
+    bool bonusControlStarted = false;
+    void tickRotaryBonus(float dt);
     void startTunnel();
     void tickTunnel(float dt);
     float randf(float lo, float hi);
@@ -183,7 +185,10 @@ class Game {
          bonusWon = false, bonusFinished = false;
     bool droidPending = false, earlyDroid = false;
     float droidLane = 0, bonusTime = 0, bonusX = 0, bonusY = 0, bonusAngle = 0;
-    float bonusDistance = 0, bonusSpeed = 30, bonusImpulse = 0, bonusEffectTime = 0;
+    float bonusDistance = 0, bonusSpeed = 30, bonusVerticalVelocity = 0, bonusEffectTime = 0;
+    float bonusHorizontalVelocity = 0;
+    static constexpr float ringWheelGain = .125f * 2 * 60 / 32;
+    static constexpr float bonusVerticalMax = 8.f * 60 / 256;
     int bonusBoosts = 0, bonusLastScore = 0;
     std::array<TunnelSegment, 64> tunnel{};
     std::vector<float> tunnelTrailAngles;

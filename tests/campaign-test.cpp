@@ -24,6 +24,43 @@ static void pickup(Game &g) {
 }
 int main() {
     try {
+        // Rotary input changes drift, rather than teleporting the crosshair.
+        for (int type : {0, 2}) {
+            Game controls(42);
+            controls.start();
+            controls.startBonus(type);
+            controls.steer(1);
+            CHECK(controls.bonusX == 0 && controls.bonusHorizontalVelocity == Game::ringWheelGain);
+            controls.tick(1.f / 120);
+            CHECK(controls.bonusX == 0);
+            controls.tick(1.f / 120);
+            CHECK(std::abs(controls.bonusX - 1.f / 128) < .000001f);
+            CHECK(std::abs(controls.bonusY + 15.875f / 256) < .000001f);
+            controls.tick(1.f / 60);
+            CHECK(std::abs(controls.bonusX - 2.f / 128) < .000001f);
+            controls.steer(-1);
+            float stopped = controls.bonusX;
+            controls.tick(1.f / 60);
+            CHECK(controls.bonusX == stopped && controls.bonusHorizontalVelocity == 0);
+            controls.bonusVerticalVelocity = 0;
+            controls.bonusUp = true;
+            controls.tick(1.f / 60);
+            CHECK(controls.bonusVerticalVelocity == .5f * 60 / 256);
+            controls.bonusUp = false;
+            controls.tick(1.f / 60);
+            CHECK(controls.bonusVerticalVelocity == .375f * 60 / 256);
+            controls.bonusUp = controls.bonusDown = true;
+            controls.tick(1.f / 60);
+            CHECK(controls.bonusVerticalVelocity == .875f * 60 / 256); // A wins.
+            controls.pause();
+            auto cursor = controls.bonusCursor();
+            controls.tick(1);
+            CHECK(cursor.x == controls.bonusX && cursor.y == controls.bonusY);
+            controls.pause();
+            controls.bonusFinished = true;
+            controls.steer(10);
+            CHECK(controls.bonusHorizontalVelocity == 0);
+        }
         // All three audit reproductions, including a jump that overlaps the coordinate reset.
         Game g;
         g.start();
@@ -289,10 +326,11 @@ int main() {
                         float desired = std::clamp(delta * 8.f, -6.f, 6.f);
                         g.steer((desired - g.tunnelVelocity) / Game::tunnelWheelGain);
                     } else {
-                        g.steer((target.x - g.bonusX) / .16f);
-                        float correction = (target.y - g.bonusY) * 30 - g.bonusImpulse;
-                        g.bonusUp = correction > .8f;
-                        g.bonusDown = correction < -.8f;
+                        float horizontal = std::clamp((target.x - g.bonusX) * 16, -16.f, 16.f);
+                        g.steer((horizontal - g.bonusHorizontalVelocity) / Game::ringWheelGain);
+                        float correction = (target.y - g.bonusY) * 16 - g.bonusVerticalVelocity * 4;
+                        g.bonusUp = correction > .1f;
+                        g.bonusDown = correction < -.1f;
                     }
                     int gate = g.bonusGate, effect = g.bonusGateEffect(gate), score = g.score;
                     float speed = g.bonusSpeed;
@@ -302,9 +340,9 @@ int main() {
                         CHECK(g.score - score ==
                               g.bonusLastScore + (g.bonusWon && type != 1 ? 20000 : 0));
                         if (effect == 1)
-                            CHECK(g.bonusImpulse > 2.3f);
+                            CHECK(g.bonusVerticalVelocity == Game::bonusVerticalMax);
                         if (effect == 2)
-                            CHECK(g.bonusImpulse < -2.3f);
+                            CHECK(g.bonusVerticalVelocity == -Game::bonusVerticalMax);
                         if (effect == 3)
                             CHECK(std::abs(g.bonusSpeed - speed * 1.125f) < .001f);
                         if (effect == 4)

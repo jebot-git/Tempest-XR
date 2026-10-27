@@ -50,9 +50,9 @@ for all three families. Boundary deltas must stay below 0.03 meters per 120 Hz
 tick. Explosion/capture paths also test pause, frozen combat, same-wave respawn,
 final-life behavior and camera continuity, with a 0.06-meter tick limit.
 
-Gameplay (including 180 simulated seconds), campaign, timed rim combat,
-source-behavior, enemy-AI and tunnel executables all pass AddressSanitizer and
-UndefinedBehaviorSanitizer with leak detection.
+At `8a47fb9`, gameplay (including 180 simulated seconds), campaign, timed rim
+combat, source-behavior, enemy-AI and tunnel executables all passed AddressSanitizer
+and UndefinedBehaviorSanitizer with leak detection.
 Regenerating webs, campaign tables, meshes, original art/font maps and sample
 metadata from the pinned source reproduces their output bytes exactly.
 
@@ -116,3 +116,13 @@ and quit: all saved the reserved flag as zero while retaining scores, unlocked
 progress and volumes. The seven isolated native XR scenarios also passed again.
 The source-fidelity probes and remaining uncovered cases are recorded in the
 post-implementation evaluation in BEHAVIOR_AUDIT.md.
+
+The rotary bonus follow-up passes all eleven OpenXR and ten desktop suites.
+The campaign suite still completes all 24 courses using only public wheel/button
+controls, now steering momentum rather than assigning horizontal position. New
+checks cover the initial viewport/controller distinction, 60 Hz control updates,
+continued horizontal drift, opposite-wheel braking, A/C acceleration, release
+friction, simultaneous-button priority and paused/finished input. The seven
+simulated native XR scenarios passed with the new movement. Desktop and stereo
+briefings were inspected; the duplicate bonus-entry announcement is suppressed
+so it does not obscure the controls.

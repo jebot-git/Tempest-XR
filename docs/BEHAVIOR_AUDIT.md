@@ -402,3 +402,19 @@ has no corresponding centered desktop card. The rectangle, universal warning
 and jump wording are modern additions. Correcting their scope/presentation
 remains an evaluation finding; the requested autofire removal does not change
 that UI.
+
+### Requested rotary bonus control follow-up
+
+Ring/psychedelic wheel input now accumulates horizontal momentum through the
+primary `m7run`/`iii` rule. LMB/RMB represent A/C and use source vertical
+acceleration, friction, priority and gate momentum changes; idle initial drift
+and the initial viewport/controller positions are distinct. Source Y is mapped
+to OpenGL Y consistently for gates and cursor. Tunnel remains inertial wheel-only
+rotation. Desktop and XR explain reversing the wheel to brake and releasing
+vertical buttons to coast. Public-control tests complete all 24 courses.
+
+The primary input behavior is translated; vertical meter-space bounds and
+hardware rotary calibration remain adapted. The preserved secondary-pad
+fall-through is excluded for the single-mouse interface, as detailed in
+SOURCE_NOTES.md. This follow-up leaves the hit/spawn/budget/geometry/clearance
+and text-panel findings above open.

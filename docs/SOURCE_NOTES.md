@@ -68,7 +68,7 @@ Ring-course words pack delay, signed X, signed Y and gate effect. Their XY
 layouts, delays, effect types and eight-course order are imported. After the source-based first-run
 approach (about nine seconds for rings), emission gaps use the source countdown and ground speed;
 boosts accelerate all approaching gates by one eighth. Up/down gates apply a
-short vertical impulse. Psycho mode overrides delay to eight as in `cg`.
+vertical momentum change. Psycho mode overrides delay to eight as in `cg`.
 `run_gate`/`xbon` accuracy rewards replace flat awards. Tunnel courses use all 64 turn bytes, emitting one turn every 16 segments.
 The translated 64-segment buffer, two pattern generators, green-track test,
 trail growth/loss and score tiers run at 60 Hz. Although `tundraw` loads
@@ -141,3 +141,28 @@ The reflected mirror ring uses the `ringbull` raster rectangle in `pic2`; shed
 beast parts retain the corresponding `hornm2`/`hornm3` meshes. The modern swept
 impact system and object collections do not reproduce Jaguar list allocation
 or every sub-frame ordering detail.
+
+## Rotary bonus controls
+
+The primary `m7run` rotary branch accumulates `rot_cum` into `roach`; `iii`
+adds twice that momentum to the horizontal position every source frame, with
+no horizontal friction. Mouse-wheel notches now add momentum rather than
+teleporting X. One nominal notch represents a `$2000` rotary sample; this maps
+to .46875 meters/second of horizontal drift at the existing 32-units/meter scale.
+Opposite notches brake or reverse it. The source horizontal interval is retained.
+
+Buttons A/C map to held LMB/RMB and use the `iycon` acceleration `$8000`,
+friction `$2000` and maximum acceleration/speed field `$80000`, at 60 Hz.
+Releasing the buttons coasts with friction. A takes precedence when both are
+held. `zup`/`zdn` replace vertical momentum; they do not add an independently
+decaying impulse. The initial `iycon` position/velocity and initial viewport
+position are distinguished. Source downward Y is converted to upward OpenGL Y
+for the gate coordinates and crosshair together.
+
+This translation follows the primary rotary/A-C controls. The preserved,
+unreleased rotary branch also falls through into a secondary-pad path; that
+extra pad pass is excluded for the single-mouse interface. Vertical meter-space
+bounds remain the recreation's wider bounds so its imported courses remain
+navigable. Hardware adaptive rotary sensitivity and exact original projection
+remain adaptations. Tunnel `tunrun` already accumulated rotary momentum without
+friction; it continues to use wheel-only rotation and opposite input for braking.

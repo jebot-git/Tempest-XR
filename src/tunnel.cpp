@@ -4,6 +4,37 @@ namespace tempest {
 namespace {
 constexpr float tau = 6.283185307f;
 }
+void Game::tickRotaryBonus(float dt) {
+    // m7run/iii: rotary deltas accumulate momentum, then position advances every
+    // source frame. The A/C buttons use iycon's acceleration, friction and cap.
+    // Meter-space vertical bounds retain room for the imported gate courses.
+    bonusControlClock += dt;
+    while (bonusControlClock + 1e-9 >= 1.0 / 60) {
+        bonusControlClock -= 1.0 / 60;
+        if (!bonusControlStarted) {
+            bonusY = -8.f / 256; // m7go: iycon=$80000; initial vp_y is separate.
+            bonusControlStarted = true;
+        }
+        float x = bonusX + bonusHorizontalVelocity / 60;
+        if (x >= -5 && x < 5)
+            bonusX = x; // iii rejects an out-of-range move, without clearing roach.
+        constexpr float acceleration = .5f * 60 / 256, friction = .125f * 60 / 256;
+        if (bonusUp) { // A takes precedence if A and C are both held.
+            if (bonusVerticalVelocity <= bonusVerticalMax)
+                bonusVerticalVelocity += acceleration;
+        } else if (bonusDown) {
+            if (bonusVerticalVelocity > -bonusVerticalMax)
+                bonusVerticalVelocity -= acceleration;
+        } else if (std::abs(bonusVerticalVelocity) < friction)
+            bonusVerticalVelocity = 0;
+        else
+            bonusVerticalVelocity -= std::copysign(friction, bonusVerticalVelocity);
+        bonusY = std::clamp(bonusY + bonusVerticalVelocity / 60, -4.5f, 4.5f);
+        if ((bonusY >= 4.5f && bonusVerticalVelocity > 0) ||
+            (bonusY <= -4.5f && bonusVerticalVelocity < 0))
+            bonusVerticalVelocity = 0;
+    }
+}
 void Game::startTunnel() {
     tunnelHead = tunnelSteps = 0;
     tunnelPhase = 0;

@@ -58,7 +58,8 @@ int main() {
         status.startBonus(2);
         status.pause();
         expectHud("PSYCHEDELIC BONUS");
-        expectHud("HOLD LMB / UP / W: UP");
+        expectHud("HOLD LMB (A): UP / RMB (C): DOWN");
+        expectHud("REVERSE WHEEL TO BRAKE");
         expectHud("MISSING ENDS BONUS");
         expectHud("PAUSED / CLICK OR ENTER TO RESUME");
         status.startBonus(1);

@@ -61,8 +61,10 @@ closed webs wrap, and open webs stop at their ends.
 Normal firing requires holding LMB. Releasing it stops new shots. There is no
 hands-free autofire toggle; older saved autofire preferences are ignored.
 
-In ring and psychedelic bonus stages, the **wheel controls X**, **holding left
-mouse or Up/W moves up**, and **holding right mouse or Down/S moves down**. In the tunnel bonus,
+In ring and psychedelic bonus stages, the **wheel changes horizontal drift**;
+reverse it to brake. **Hold LMB (original button A) to accelerate up** and
+**RMB (button C) to accelerate down**. Releasing the buttons coasts with friction.
+Up/W and Down/S are keyboard alternatives. In the tunnel bonus,
 the wheel or Left/Right/A/D adjusts rotation speed; reverse to brake. Stay on
 the green track to grow the trail and score continuously. Going off track
 shrinks the trail; recover before it runs out. Instructions appear in desktop

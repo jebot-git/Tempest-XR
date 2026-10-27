@@ -617,6 +617,8 @@ void Renderer::grid(const Game &g, Vec3 offset, float alpha) {
     }
 }
 void Renderer::particleMessage(const Game &g, bool headset) {
+    if (g.isBonus() && (g.message == "FOLLOW THE RINGS" || g.message == "TUNNEL BONUS"))
+        return; // The bonus briefing already names the objective; keep its controls unobscured.
     if ((g.messageTime <= 0 && g.mode != Mode::GameOver) || g.mode == Mode::Menu)
         return;
     float t = g.mode == Mode::GameOver ? std::fmod(g.time, 3.f) / 3
@@ -1117,7 +1119,7 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
             result.push_back("RETURNING TO WEB");
         else if (g.isBonus())
             result.push_back(g.bonusType == 1 ? "WHEEL ADJUSTS SPEED / REVERSE TO BRAKE"
-                                              : "WHEEL X / HOLD LMB UP / RMB DOWN");
+                                              : "WHEEL ADJUSTS DRIFT / REVERSE TO BRAKE");
         else if (g.deathTime > 0)
             result.push_back(g.snatched ? "SHIP CAPTURED / RETURNING TO WEB"
                                         : "SHIP DESTROYED / RETURNING TO WEB");
@@ -1143,11 +1145,11 @@ std::vector<std::string> Renderer::bonusInstructions(const Game &g) {
                 "ON TRACK GROWS TRAIL / OFF TRACK SHRINKS IT",
                 "RECOVER BEFORE TRAIL RUNS OUT / COMPLETE TO WARP"};
     if (g.bonusGate > 0 && g.mode != Mode::Paused)
-        return {"LMB / UP / W: UP    RMB / DOWN / S: DOWN"};
-    return {"AIM CROSSHAIR THROUGH EACH RING / MISSING ENDS BONUS",
-            "WHEEL / LEFT / RIGHT: HORIZONTAL", "HOLD LMB / UP / W: UP    RMB / DOWN / S: DOWN",
-            "ARROWS PUSH UP / DOWN / BOLTS BOOST SPEED",
-            "CENTRE HITS SCORE MORE / COMPLETE FOR +20000"};
+        return {"LMB (A): UP / RMB (C): DOWN / REVERSE WHEEL TO BRAKE"};
+    return {"AIM THROUGH RINGS / MISSING ENDS BONUS",
+            "WHEEL: HORIZONTAL DRIFT / REVERSE WHEEL TO BRAKE", "HOLD LMB (A): UP / RMB (C): DOWN",
+            "RELEASE TO COAST / UP-W AND DOWN-S ALSO WORK",
+            "ARROWS PUSH / BOLTS BOOST / +20000 TO FINISH"};
 }
 void Renderer::headsetHud(const Game &g) {
     glDisable(GL_DEPTH_TEST);
@@ -1160,7 +1162,7 @@ void Renderer::headsetHud(const Game &g) {
     for (size_t i = 0; i < lines.size(); ++i) {
         // Inventory stays above the rim; mode/bonus prompts sit below it.
         float y = i < 5                   ? float(i) * 22
-                  : i >= instructionStart ? 200 + float(i - instructionStart) * 24
+                  : i >= instructionStart ? 120 + float(i - instructionStart) * 24
                                           : 630 + float(i - 5) * 24;
         text(0, y, lines[i], 1.4f, i < 2 ? white : i < 5 ? cyan : lime);
     }
@@ -1212,7 +1214,7 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
     if (g.isBonus()) {
         text(48, 829,
              g.bonusType == 1 ? "WHEEL / LEFT / RIGHT: ROTATION SPEED / REVERSE TO BRAKE"
-                              : "WHEEL: X   HOLD LMB / UP / W: UP   RMB / DOWN / S: DOWN",
+                              : "WHEEL: DRIFT / REVERSE TO BRAKE   LMB (A): UP   RMB (C): DOWN",
              1.6f, cyan);
     } else {
         text(48, 829, "WHEEL", 1.6f, white);
