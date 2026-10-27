@@ -12,6 +12,7 @@ constexpr float dt = 1.f / 120;
 static Game setup(int level = 1) {
     Game g(42);
     g.start(level);
+    g.tick(1.f / 120);
     g.fireHeld = false;
     g.invulnerable = 1000;
     g.enemiesRemaining =
@@ -33,10 +34,10 @@ static void step(Game &g, int ticks) {
 }
 static void shoot(Game &g, const Enemy &e, bool powered = false, bool ally = false) {
     g.boost = powered;
-    Shot s{e.lane, std::max(0.f, e.depth - .01f)};
+    Shot s{e.lane, std::max(0.f, e.depth - .03f)};
     s.ally = ally;
     g.shots = {s};
-    g.tick(dt);
+    g.tick(1.f / 60);
 }
 int main() {
     try {
@@ -74,7 +75,7 @@ int main() {
             step(g, 8);
             CHECK(g.enemies[0].depth < before && g.enemies[0].runningBelowRim);
             g.enemies[0].depth = .000001f;
-            g.tick(dt);
+            step(g, 2);
             CHECK(g.enemies[0].rim && !g.enemies[0].runningBelowRim);
             for (int i = 0; i < 250 && g.enemies[0].lane != 3; ++i)
                 g.tick(dt);
@@ -109,7 +110,8 @@ int main() {
             step(g, 2);
             CHECK(enemy(g, Kind::Spiker).lane != rail);
             g.zap();
-            step(g, 8);
+            for (int i = 0; i < 120 && count(g, Kind::Spiker); ++i)
+                g.tick(dt);
             CHECK(count(g, Kind::Spiker) == 0 && g.hasSpike(rail));
         }
         {
@@ -144,7 +146,7 @@ int main() {
             auto g = setup();
             g.spikes[3] = 1;
             g.spikePresent[3] = true;
-            g.shots = {{3, .99f}, {3, .99f}};
+            g.shots = {{3, .96f}, {3, .96f}};
             step(g, 1);
             CHECK(!g.hasSpike(3) && g.score == 6 && g.shots.size() == 1);
         }
@@ -231,7 +233,7 @@ int main() {
             CHECK(enemy(g, Kind::Adroid).droidMotion == DroidMotion::Zapping);
             g.lane = dest;
             g.invulnerable = 0;
-            g.tick(dt);
+            step(g, 2);
             CHECK(g.lives == 2);
         }
         {
@@ -253,7 +255,7 @@ int main() {
             g.jump();
             step(g, 50);
             g.fireHeld = true;
-            g.tick(dt);
+            step(g, 10); // Held-fire counter expires, then the new shot gets its first update.
             CHECK(count(g, Kind::Adroid) == 0 && g.lives == 3);
         }
         // Mirror hits take over all weapons; beast stages shed distinct absorbing projectiles.
@@ -313,7 +315,7 @@ int main() {
             }
         for (Kind kind : {Kind::MirrorShot, Kind::BeastShot}) {
             auto g = setup();
-            g.spawn(kind, 3, -.17f);
+            g.spawn(kind, 3, -.12f);
             step(g, 1);
             CHECK(count(g, kind) == 1);
             step(g, 10);
@@ -328,7 +330,7 @@ int main() {
             g.zap();
             step(g, 8);
             CHECK(count(g, Kind::Mirror) == 1 && count(g, Kind::MirrorShot) == 1 &&
-                  count(g, Kind::Adroid) == 1 && count(g, Kind::Beast) == 1);
+                  count(g, Kind::Adroid) == 1 && count(g, Kind::Beast) == 0);
         }
         {
             auto g = setup();
@@ -395,7 +397,7 @@ int main() {
             g.fireHeld = true;
             step(g, 16);
             CHECK(g.shots.size() == 2);
-            CHECK(std::abs(g.shots[0].depth - g.shotSpeed() * 16 / 120) < .00001f);
+            CHECK(std::abs(g.shots[0].depth - g.shotSpeed() * 4 / 60) < .00001f);
             step(g, 100);
             CHECK(g.shots.size() <= 8);
         }

@@ -42,12 +42,14 @@ void Game::loadWeb() {
     wheelRemainder = 0;
     transitionOffset = {};
     waveTime = rechargeDelay = 0;
-    fireTimer = 0;
+    fireFrames = beastly ? 6 : 3;
+    bulletExpanded = false;
+    nextBulletSlot = 0;
     const auto &wave = campaignWaves[size_t(level - 1)];
     waveSize = wave.count;
     enemiesRemaining = waveSize;
     lastPulse = false;
-    generationClock = zapClock = droidClock = 0;
+    generationClock = droidClock = 0;
     zapActive = zapSingle = earlyExit = false;
     droidSteps = 0;
     droidFireFrames = 5;
@@ -59,6 +61,7 @@ void Game::loadWeb() {
     shots.clear();
     effects.clear();
     spikes.assign(size_t(web.lanes()), 1.f);
+    spikeSerials.assign(size_t(web.lanes()), 0);
     spikePresent.assign(size_t(web.lanes()), false);
     superSpikes.assign(size_t(web.lanes()), false);
     zaps = 2;
@@ -71,12 +74,22 @@ void Game::loadWeb() {
     kills = 0;
     // Do not reset an airborne jump or its cooldown: the rig must cross webs continuously.
     unlockedLevel = std::max(unlockedLevel, level);
+    runHighest = std::max(runHighest, level);
     selectedLevel = level;
 }
 void Game::start(int startingLevel, bool awardStart) {
     finishScoreEntry();
     level = std::clamp(startingLevel, 1, 100);
+    runHighest = level;
+    frontAge = 0;
+    frontTicks = 0;
+    attractGame.reset();
     alienFireCounter = 112;
+    // frames is global in the source: title and prior games retain its phase.
+    nextSerial = 1;
+    rotarySensitivity = 0x2000;
+    rotaryMoved = false;
+    padHorizontalVelocity = 0;
     score = 0;
     lives = 3;
     kills = 0;
@@ -117,9 +130,14 @@ void Game::start(int startingLevel, bool awardStart) {
     announce("SUPERZAPPER RECHARGE");
 }
 void Game::announce(const std::string &text, float seconds) {
+    showMessage(text, std::abs(seconds - 1.6f) < .0001f ? 100 : int(std::round(seconds * 60)));
+}
+void Game::showMessage(const std::string &text, int hold) {
     message = text;
-    messageTime = seconds;
-    messageDuration = seconds;
+    messageFrame = 0;
+    messageHold = std::max(0, hold);
+    messageScaleX = messageScaleY = 1;
+    messageTime = messageDuration = float(messageHold + 52) / 60;
 }
 int Game::boundedLane(int n) const {
     int count = web.lanes();
@@ -137,23 +155,25 @@ int Game::directionTo(int from, int to) const {
 }
 void Game::steer(float notches) {
     if (enteringScore) {
-        constexpr char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        auto pos = std::string(alphabet).find(scoreInitials[size_t(scoreCursor)]);
-        int index = pos == std::string::npos ? 0 : int(pos);
         wheelRemainder += std::clamp(notches, -32.f, 32.f);
         int steps = int(wheelRemainder);
         wheelRemainder -= steps;
-        index = ((index + steps) % 36 + 36) % 36;
-        scoreInitials[size_t(scoreCursor)] = alphabet[index];
+        scoreChoice = ((scoreChoice + steps) % 32 + 32) % 32;
         return;
     }
     if (deathTime > 0)
         return;
     if (mode == Mode::Menu) {
-        wheelRemainder += notches;
-        int steps = int(wheelRemainder);
-        wheelRemainder -= steps;
-        selectedLevel = std::clamp(selectedLevel + steps, 1, unlockedLevel);
+        if (frontPage == FrontPage::Keys) {
+            wheelRemainder += notches;
+            int steps = int(wheelRemainder);
+            wheelRemainder -= steps;
+            keyCursor = std::clamp(keyCursor + steps, 0, 3);
+        } else {
+            frontAge = 0;
+            frontTicks = 0;
+            frontPage = FrontPage::Title;
+        }
         return;
     }
     if (mode == Mode::Bonus) {
@@ -412,6 +432,7 @@ void Game::spawn(Kind kind, int spawnLane, float depth, bool entering) {
                                     : int(randf(0, float(web.lanes()) - .001f)))
                           : boundedLane(spawnLane);
     auto enemy = makeEnemy(kind, l, depth, randf(0, 1) > .5f ? 1 : -1);
+    enemy.serial = nextSerial++;
     if (entering && kind != Kind::Spiker) {
         enemy.entering = true;
         enemy.buildFrames = 150;
@@ -468,6 +489,7 @@ void Game::destroy(Enemy &e, bool zap) {
             auto powerup = makeEnemy(Kind::Powerup, e.lane, std::clamp(e.depth, .1f, .95f), 1);
             powerup.pickupFrames = 76; // 300, subtract four through signed-negative expiry.
             pending.push_back(powerup);
+            sounds.push_back(Sound::PowerupSpawn);
             pickup = true;
             int index = std::min(int(pup_stuff.size()) - 1, (level - 1) / 4);
             killsToPowerup = (pup_stuff[size_t(index)] & 255) + 1;
@@ -510,7 +532,9 @@ void Game::hit(bool snatch) {
         respawnShip = deathShip + Vec3{0, 0, .8f};
         mode = Mode::GameOver;
         best = std::max(best, score);
-        offerHighScore();
+        frontPage = FrontPage::GameOver;
+        frontAge = 0;
+        frontTicks = 0;
     }
 }
 void Game::zap() {
@@ -544,6 +568,7 @@ void Game::collectPowerup() {
         droidPending = false;
         earlyDroid = true;
         droidActive = true;
+        droidSerial = nextSerial++;
         droidLane = visualLane;
         announce("A.I. DROID");
         sounds.push_back(Sound::Pickup);
@@ -554,6 +579,7 @@ void Game::collectPowerup() {
     switch (powerupStage) {
     case 0:
         boost = true;
+        fireFrames = beastly ? 4 : 2;
         announce("PARTICLE LASER");
         break;
     case 2:
@@ -562,6 +588,7 @@ void Game::collectPowerup() {
         break;
     case 4:
         droidActive = true;
+        droidSerial = nextSerial++;
         droidLane = visualLane;
         announce("A.I. DROID");
         break;
@@ -601,6 +628,7 @@ void Game::beginTransition(int destination) {
     droidActive = earlyDroid = false; // rundroid expires collected droids at wave_tim == -2.
     mode = Mode::Transition;
     transitionTimer = 2.4f;
+    enginePitch = 10;
     sounds.push_back(Sound::ClearanceEngine);
     announce(clearanceWarning() ? "AVOID THE SPIKES" : "", 250.f / 60);
 }
@@ -614,7 +642,9 @@ void Game::finishCampaign() {
     effects.clear();
     enemies.clear();
     shots.clear();
-    offerHighScore();
+    frontPage = FrontPage::Congratulations;
+    frontAge = 0;
+    frontTicks = 0;
     announce(beastly ? "TOTALLY AWESOME!" : "YOU ARE A SUPERSTAR", 10);
     sounds.push_back(Sound::Excellent);
     burst(shipPosition(), 3, 800);
@@ -640,8 +670,10 @@ void Game::startBonus(int type) {
     bonusHorizontalVelocity = 0;
     bonusVerticalVelocity = bonusType == 1 ? 0 : -bonusVerticalMax;
     bonusBoosts = bonusLastScore = 0;
-    bonusSpeed =
-        (bonusType == 2 ? 37.5f : 30.f) + float(bonusRuns[size_t(bonusType)] - 1) * .46875f;
+    bonusVelocityFixed =
+        (bonusType == 2 ? 0xa000 : 0x8000) + ((bonusRuns[size_t(bonusType)] - 1) * 512 & 65535);
+    bonusGroundFixed = 0;
+    bonusSpeed = float(bonusVelocityFixed) * 60 / 65536;
     bonusGate = 0;
     bonusHits = 0;
     bonusX = bonusAngle = 0;
@@ -650,7 +682,10 @@ void Game::startBonus(int type) {
     if (bonusType == 1)
         startTunnel();
     bonusEntryOffset = entry - (bonusCursor() + Vec3{0, 0, -3.8f});
-    bonusCheckTime = 0;
+    bonusClock = 0;
+    gateTimer = gateNext = 0;
+    if (bonusType != 1)
+        planBonusGates();
     bonusResultTime = 0;
     bonusFinished = bonusWon = false;
     bonusUp = bonusDown = false;
@@ -680,19 +715,17 @@ int Game::bonusGateEffect(int gate) const {
     return int(course[size_t(std::clamp(gate, 0, int(course.size()) - 2))] & 255);
 }
 float Game::bonusGateDistance(int gate) const {
-    // cg starts at 16 units; the first gate travels from Z=255 to Z<=2.
-    // These first-run distances include 60 Hz countdown quantization. Later
-    // gaps use (packed delay + 1) * 12 units. Boosts accelerate every
-    // approaching gate, rather than assigning each a fixed arrival timestamp.
     if (bonusType == 1)
         return float((gate + 1) * 16);
-    float distance = bonusType == 2 ? 269.375f : 269.5f;
-    for (int i = 0; i < gate; ++i)
-        distance += bonusType == 1 ? 13.5f : float(bonusGateDelay(i) + 1) * 12;
-    return distance;
+    return float(gateLaunches[size_t(std::clamp(gate, 0, int(gateLaunches.size()) - 1))] +
+                 ((int64_t(252) * 65536 / bonusVelocityFixed + 1) * bonusVelocityFixed)) /
+           65536;
 }
 float Game::bonusGateZ(int gate) const {
-    return -3.8f - (bonusGateDistance(gate) - bonusDistance) / 32;
+    if (bonusType == 1)
+        return -3.8f;
+    auto launch = gateLaunches[size_t(std::clamp(gate, 0, int(gateLaunches.size()) - 1))];
+    return -3.8f - (255 - float(bonusGroundFixed - launch) / 65536) / 32;
 }
 Vec3 Game::bonusTarget(int gate) const {
     if (bonusType == 1) {
@@ -704,6 +737,14 @@ Vec3 Game::bonusTarget(int gate) const {
     float x = float(int8_t((packed >> 16) & 255)) / 32.f,
           y = float(int8_t((packed >> 8) & 255)) / 32.f;
     return {bonusType == 2 ? -x : x, -y, 0};
+}
+float Game::bonusVerticalLimit() const {
+    if (strictRotaryLimits || bonusType == 1)
+        return 1.25f;
+    float limit = 1.25f;
+    for (int i = 0; i < bonusGateCount(); ++i)
+        limit = std::max(limit, std::abs(bonusTarget(i).y) + .25f);
+    return limit;
 }
 Vec3 Game::bonusCursor() const {
     return bonusType == 1 ? Vec3{std::cos(bonusAngle) * 1.4f, std::sin(bonusAngle) * 1.4f, 0}
@@ -723,12 +764,23 @@ void Game::tickBonus(float dt) {
         tickTunnel(dt);
         return;
     }
+    bonusClock += double(dt) * 60;
+    if (bonusClock < 1 - .000001)
+        return;
+    bonusClock -= 1;
+    dt = 1.f / 60;
     tickRotaryBonus(dt);
     bonusEffectTime = std::max(0.f, bonusEffectTime - dt);
-    bonusDistance += bonusSpeed * dt;
-    if (bonusDistance >= bonusGateDistance(bonusGate)) {
+    bonusGroundFixed += bonusVelocityFixed;
+    bonusDistance = float(bonusGroundFixed) / 65536;
+    advanceBonusGenerator();
+    if (bonusGate < gateNext &&
+        (bonusGroundFixed - gateLaunches[size_t(bonusGate)]) > int64_t(252) * 65536) {
         auto target = bonusTarget(bonusGate), cursor = bonusCursor();
-        float dx = std::abs(target.x - cursor.x), dy = std::abs(target.y - cursor.y);
+        float dx =
+            float(std::abs(int(std::floor(cursor.x * 32)) - int(std::round(target.x * 32)))) / 32;
+        float dy =
+            float(std::abs(int(std::floor(-cursor.y * 32)) - int(std::round(-target.y * 32)))) / 32;
         bool passed = bonusType == 1 ? std::hypot(target.x - cursor.x, target.y - cursor.y) < .6f
                                      : dx < .25f && dy < .25f;
         if (!passed) {
@@ -751,7 +803,8 @@ void Game::tickBonus(float dt) {
             announce(effect == 1 ? "UP IMPULSE" : "DOWN IMPULSE", .9f);
             bonusEffectTime = 1;
         } else if (effect == 3) {
-            bonusSpeed *= 1.125f; // spup adds one eighth of grndvel.
+            bonusVelocityFixed += bonusVelocityFixed >> 3;
+            bonusSpeed = float(bonusVelocityFixed) * 60 / 65536;
             ++bonusBoosts;
             bonusEffectTime = 1;
             announce("SPEED BOOST", 1);
@@ -808,13 +861,44 @@ void Game::tickPickups(float dt) {
     }
 }
 void Game::tick(float dt) {
+    if (!std::isfinite(dt) || dt <= 0)
+        return;
+    while (dt > .000001f) {
+        float step = std::min(dt, 1.f / 120);
+        tickStep(step);
+        dt -= step;
+    }
+}
+void Game::tickStep(float dt) {
     if (mode == Mode::Paused)
         return;
+    sourceClock += double(dt) * 60;
+    bool sourceUpdate = sourceClock >= 1 - .000001;
+    if (sourceUpdate) {
+        sourceClock -= 1;
+        ++sourceFrame;
+    }
     time += dt;
     tickEffects(dt);
     flash = std::max(0.f, flash - dt);
     zapTime = std::max(0.f, zapTime - dt);
-    messageTime = std::max(0.f, messageTime - dt);
+    if (sourceUpdate) {
+        tickRotaryCalibration();
+        if (mode == Mode::Transition) {
+            ++enginePitch;
+            engineVolumePhase = (int(30 + warpDistance() / 9 * 160) * 4) & 255;
+        }
+        if (messageTime > 0) {
+            ++messageFrame;
+            int tail = std::max(0, messageFrame - messageHold - 1);
+            messageScaleX = 1;
+            messageScaleY = 1 + tail * .5f;
+            int shear = std::abs(int((sourceFrame * 2) & 255) - 127) - 63;
+            messageShearX = float(shear) / 64;
+            messageShearY = -messageShearX / 2;
+            messageTime = std::max(0.f, float(messageHold + 52 - messageFrame) / 60);
+        }
+    }
     oneUpTime = std::max(0.f, oneUpTime - dt);
     for (auto &p : particles) {
         p.life -= dt;
@@ -851,10 +935,14 @@ void Game::tick(float dt) {
         while (visualLane >= n)
             visualLane -= n;
     }
-    if (mode == Mode::Menu || mode == Mode::GameOver)
+    if (mode == Mode::Menu || mode == Mode::GameOver) {
+        tickFrontend(dt, sourceUpdate);
         return;
-    if (mode == Mode::Victory)
+    }
+    if (mode == Mode::Victory) {
+        tickFrontend(dt, sourceUpdate);
         return;
+    }
     invulnerable = std::max(0.f, invulnerable - dt);
     jumpTime = std::max(0.f, jumpTime - dt);
     jumpCooldown = std::max(0.f, jumpCooldown - dt);
@@ -909,7 +997,23 @@ void Game::tick(float dt) {
             announce("SUPERZAPPER RECHARGE");
         }
     }
+    if (!sourceUpdate)
+        return;
+    dt = 1.f / 60;
     waveTime += dt;
+    for (auto &e : enemies)
+        if (!e.serial)
+            e.serial = nextSerial++;
+    for (int i = 0; i < web.lanes(); ++i)
+        if (hasSpike(i) && !spikeSerials[size_t(i)])
+            spikeSerials[size_t(i)] = nextSerial++;
+    bulletExpanded = bulletExpanded || droidActive;
+    for (auto &shot : shots) {
+        if (!shot.serial)
+            shot.serial = nextSerial++;
+        if (shot.tableSlot < 0)
+            shot.tableSlot = claimBulletSlot();
+    }
     bool pulse = pulseActive();
     if (pulse && !lastPulse && std::any_of(enemies.begin(), enemies.end(), [](auto &e) {
             return !e.entering && (e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark);
@@ -931,18 +1035,26 @@ void Game::tick(float dt) {
             }
         }
     }
-    tickZap(dt);
-    fireTimer -= dt;
-    if (fireHeld && fireTimer <= .000001f && shotSlots(false) < 8 && physicalSlots() < 64) {
-        shots.push_back({lane, -jumpLift() / 9});
-        fireTimer = float(beastly ? (boost ? 5 : 7) : (boost ? 3 : 4)) / 60;
-        sounds.push_back(boost ? Sound::PoweredShot : Sound::Shot);
+    bool zapFrame = zapActive && (sourceFrame & 3) == 0 && zapLastFrame != sourceFrame;
+    bool zapped = false;
+    if (zapFrame)
+        zapLastFrame = sourceFrame;
+    if (fireHeld && --fireFrames < 0) {
+        fireFrames = beastly ? (boost ? 4 : 6) : (boost ? 2 : 3);
+        if (shotSlots(false) < 8 && physicalSlots() < 64) {
+            shots.push_back({lane, -jumpLift() / 9});
+            shots.back().serial = nextSerial++;
+            shots.back().bornFrame = sourceFrame;
+            shots.back().tableSlot = claimBulletSlot();
+            sounds.push_back(boost ? Sound::PoweredShot : Sound::Shot);
+        }
     }
     if (droidActive)
         tickDroid(dt);
     for (auto &s : shots) {
         s.previous = s.depth;
-        s.depth += dt * shotSpeed();
+        if (s.bornFrame != sourceFrame)
+            s.depth += dt * shotSpeed();
     }
     tickPickups(dt);
     if (mode != Mode::Playing)
@@ -956,13 +1068,16 @@ void Game::tick(float dt) {
         FlipperMotion flipperMotion = FlipperMotion::Climbing;
         DroidMotion droidMotion = DroidMotion::Climbing;
         FuseMotion fuseMotion = FuseMotion::Climbing;
+        Enemy before;
+        bool landed = false;
     };
     std::vector<MotionFrame> motion(enemies.size());
-    // Complete movement before resolving impacts. Entity storage order must not
-    // decide which of two enemies in the same lane consumes a normal shot.
+    // Snapshot handler inputs and movement, then resolve collisions/contact in
+    // source actor order, independent of C++ vector storage order.
     for (size_t index = 0; index < enemies.size(); ++index) {
         auto &e = enemies[index];
         auto &frame = motion[index];
+        frame.before = e;
         frame.depth = e.depth;
         frame.vulnerable = shotVulnerable(e);
         frame.shotLane = e.lane;
@@ -989,7 +1104,10 @@ void Game::tick(float dt) {
                     }
                 }
             }
-            continue;
+            if (e.entering)
+                continue;
+            frame.before = e;
+            frame.depth = e.depth;
         }
         if (e.kind == Kind::Powerup)
             continue;
@@ -999,20 +1117,9 @@ void Game::tick(float dt) {
                                  : shotSpeed() * (e.kind == Kind::BeastShot ? .5f : 1.f));
             continue;
         }
-        if (e.kind == Kind::PulsarSpark) {
-            // run_pspark: contact precedes bullets and propagation, regardless
-            // of the global pulse phase. Movement is deferred until after hits.
-            if (e.lane == lane && std::abs(e.depth) <= 2.f / 160) {
-                hit();
-                frame.sparkContact = deathTime > 0;
-            }
-            continue;
-        }
+        if (e.kind == Kind::PulsarSpark)
+            continue; // Its contact precedes colok at its list position.
         float speed = enemySpeed(e.kind);
-        bool canFire = (flipperKind(e.kind) && e.motion == FlipperMotion::Climbing) ||
-                       (e.kind == Kind::Spiker && e.spikerMotion != SpikerMotion::Seeking);
-        if (canFire)
-            tryAlienFire(e, dt, children);
         if (flipperBody(e)) {
             // sweb fixes the T2K rotation-table selector to 16, then indexes
             // rospeeds -> crossdels -> pauses. Counter expiry includes zero.
@@ -1044,7 +1151,7 @@ void Game::tick(float dt) {
                 if (e.turnAngle >= e.turnArc) {
                     e.motion = FlipperMotion::Stopped;
                     e.stopTime = e.kind == Kind::Flipper && !e.emerging ? pause : 0;
-                    sounds.push_back(Sound::FlipperLand);
+                    frame.landed = true;
                 }
             } else if (e.emerging && e.scarper == 0) {
                 e.emerging = false;
@@ -1060,8 +1167,10 @@ void Game::tick(float dt) {
                 frame.angleStart = frame.angleEnd = e.turnAngle;
                 frame.arc = e.turnArc;
             }
-        } else if (e.kind == Kind::Spiker || e.kind == Kind::Fuseball || e.kind == Kind::Adroid) {
+        } else if (e.kind == Kind::Fuseball || e.kind == Kind::Adroid) {
             tickSpecialEnemy(e, dt);
+        } else if (e.kind == Kind::Spiker) {
+            // Its collie/alienfire/build handler runs at its list position below.
         } else if (!e.rim) {
             e.depth -= dt * speed;
             if (e.kind == Kind::Mirror)
@@ -1071,85 +1180,205 @@ void Game::tick(float dt) {
     struct Impact {
         float time, depth;
         size_t shot;
-        int enemy; // -1 is a spike.
-        int kind, lane;
+        int enemy, kind, lane;
+        uint64_t serial;
+        int slot = 0;
     };
     auto later = [](const Impact &a, const Impact &b) {
-        return std::tie(a.time, a.depth, a.kind, a.lane, a.shot, a.enemy) >
-               std::tie(b.time, b.depth, b.kind, b.lane, b.shot, b.enemy);
+        if (a.serial != b.serial)
+            return a.serial < b.serial;
+        if (a.time != b.time)
+            return a.time > b.time;
+        if (a.slot != b.slot)
+            return a.slot > b.slot;
+        return a.shot > b.shot; // colok scans the live bullet table before player contact.
     };
     std::priority_queue<Impact, std::vector<Impact>, decltype(later)> impacts(later);
-    auto interval = [](float start, float delta, float low, float high, float &enter, float &exit) {
-        if (std::abs(delta) < .000001f)
-            return start >= low && start <= high;
-        float a = (low - start) / delta, b = (high - start) / delta;
-        if (a > b)
-            std::swap(a, b);
-        enter = std::max(enter, a);
-        exit = std::min(exit, b);
-        return enter <= exit;
-    };
-    // colok's six source units on a 160-unit web, with swept relative motion.
-    const float hitRadius = std::nextafter(6.f / 160, 0.f); // source comparison is strict
+    for (size_t ei = 0; ei < enemies.size(); ++ei) {
+        const auto &e = enemies[ei];
+        const auto &frame = motion[ei];
+        if (e.dead || e.entering || e.kind == Kind::Powerup || frame.sparkContact)
+            continue;
+        impacts.push({1, e.depth, shots.size(), int(ei), int(e.kind), e.lane, e.serial});
+        if (e.kind == Kind::PulsarSpark)
+            impacts.push({-1, frame.depth, shots.size(), int(ei), -2, e.lane, e.serial});
+        if (zapFrame && zapEligible(frame.before))
+            impacts.push({-.5f, frame.depth, shots.size(), int(ei), -3, e.lane, e.serial});
+        bool vulnerable = frame.vulnerable;
+        // flipto rotates before flipcollie; its exact landing frame returns without collie.
+        if (frame.before.motion == FlipperMotion::Turning)
+            vulnerable = !frame.landed && shotVulnerable(e);
+        if (!vulnerable)
+            continue;
+        int enemyZ = int(std::floor(30.0 + double(frame.depth) * 160));
+        for (size_t si = 0; si < shots.size(); ++si) {
+            const auto &shot = shots[si];
+            float depth = shot.serial > e.serial ? shot.depth : shot.previous;
+            int shotZ = int(std::floor(30.0 + double(depth) * 160));
+            if (shot.serial > e.serial && shot.depth >= 1)
+                continue;
+            if (shot.bornFrame == sourceFrame && shot.creatorSerial < e.serial)
+                continue;
+            if (!shot.dead && shot.lane == frame.shotLane && std::abs(shotZ - enemyZ) < 6)
+                impacts.push({0, frame.depth, si, int(ei), int(e.kind), frame.shotLane, e.serial,
+                              shot.tableSlot});
+        }
+    }
     for (size_t si = 0; si < shots.size(); ++si) {
         const auto &shot = shots[si];
-        if (shot.dead)
-            continue;
-        float step = shot.depth - shot.previous;
-        for (size_t ei = 0; ei < enemies.size(); ++ei) {
-            const auto &e = enemies[ei];
-            const auto &frame = motion[ei];
-            if (e.dead || e.entering || e.kind == Kind::Powerup || frame.sparkContact ||
-                shot.lane != (frame.turnBegan ? e.turnFrom : frame.shotLane))
-                continue;
-            if ((e.kind == Kind::Fuseball || e.kind == Kind::MirrorShot) && !frame.vulnerable)
-                continue;
-            float enter = 0, exit = 1;
-            if (!interval(shot.previous - frame.depth, step - (e.depth - frame.depth), -hitRadius,
-                          hitRadius, enter, exit))
-                continue;
-            if (frame.turning && !frame.turnBegan) {
-                // flipcollie tests the wrapped target-angle distance <= 52.
-                // Intersect that window with the projectile contact interval:
-                // a shot which already left before vulnerability opens misses.
-                float remaining = frame.arc - frame.angleStart,
-                      delta = frame.angleStart - frame.angleEnd, earliest = 2;
-                for (auto range : {std::pair{-10000.f, 52.f}, std::pair{204.f, 256.f}}) {
-                    float a = enter, b = exit;
-                    if (interval(remaining, delta, range.first, range.second, a, b))
-                        earliest = std::min(earliest, a);
-                }
-                if (earliest > 1)
-                    continue;
-                enter = earliest;
-            }
-            float depth = frame.depth + (e.depth - frame.depth) * enter;
-            impacts.push({enter, depth, si, int(ei), int(e.kind), e.lane});
-        }
         float tip = spikes[size_t(shot.lane)];
-        if (hasSpike(shot.lane) && step > 0 && shot.previous <= tip && shot.depth >= tip)
-            impacts.push({(tip - shot.previous) / step, tip, si, -1, -1, shot.lane});
+        if (!shot.dead && hasSpike(shot.lane))
+            impacts.push(
+                {0, tip, si, -1, -1, shot.lane, spikeSerials[size_t(shot.lane)], shot.tableSlot});
     }
-    std::vector<bool> enemyHit(enemies.size(), false);
+    std::vector<bool> enemyHit(enemies.size(), false), spikeHit(size_t(web.lanes()), false);
+    auto contact = [&](size_t index) {
+        auto &e = enemies[index];
+        const auto &frame = motion[index];
+        if (!e.dead && !enemyHit[index]) {
+            if (frame.landed)
+                sounds.push_back(Sound::FlipperLand);
+            if ((flipperKind(frame.before.kind) &&
+                 frame.flipperMotion == FlipperMotion::Climbing) ||
+                (e.kind == Kind::Spiker && frame.before.spikerMotion != SpikerMotion::Seeking)) {
+                float moved = e.depth;
+                e.depth = frame.depth;
+                tryAlienFire(e, dt, children);
+                e.depth = moved;
+            }
+        }
+        if (e.dead || e.entering || e.kind == Kind::Powerup || frame.landed)
+            return;
+        if (e.kind == Kind::Spiker) {
+            tickSpecialEnemy(e, dt);
+            return;
+        }
+        if (reflected(e.kind)) {
+            if (e.lane == lane && frame.depth >= -2.f / 160 && e.depth <= 2.f / 160) {
+                hit();
+                if (deathTime > 0)
+                    e.dead = true;
+            }
+            if (e.depth < -29.f / 160) // refsht removes at Z<1; webz=110, rim Z=30.
+                e.dead = true;
+            return;
+        }
+        if (e.kind == Kind::EnemyShot) {
+            if (e.depth <= 0) {
+                if (e.lane == lane)
+                    hit();
+                e.dead = true;
+            }
+            return;
+        }
+        if (e.kind == Kind::PulsarSpark) {
+            if (frame.sparkContact)
+                return;
+            e.sparkTime -= dt;
+            while (e.sparkTime <= .000001f) {
+                e.sparkTime += 5.f / 60; // prop_del=$0404: expire after five 60 Hz updates.
+                int next = e.lane + e.direction;
+                if (!web.closed && (next < 0 || next >= web.lanes()))
+                    e.direction = -e.direction;
+                e.lane = boundedLane(e.lane + e.direction);
+            }
+            return;
+        }
+        if (flipperBody(e)) {
+            bool catches = !e.emerging && std::abs(frame.depth) <= 2.f / 160 &&
+                           (frame.turning ? !shotVulnerable(e) && e.turnFrom == lane
+                                          : frame.before.rim && frame.shotLane == lane);
+            if (catches) {
+                hit(true);
+                if (deathTime > 0 && snatched)
+                    e.dead = true;
+            }
+            return;
+        }
+        if (e.kind == Kind::Pulsar && pulseActive() && e.lane == lane)
+            hit();
+        if (e.kind == Kind::Adroid) {
+            if (frame.droidMotion == DroidMotion::Zapping && frame.shotLane == lane)
+                hit();
+            return; // Patrol is above the rim; it only kills while zapping.
+        }
+        if (e.kind == Kind::Fuseball) {
+            if (frame.fuseMotion == FuseMotion::Crossing && std::abs(frame.depth) <= 2.f / 160 &&
+                frame.shotLane == lane)
+                hit();
+            return;
+        }
+        bool tanker =
+            e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker;
+        if (tanker && e.depth <= 0) {
+            e.depth = 0;
+            openTanker(e, children);
+            return;
+        }
+        if (e.depth <= 0) {
+            e.depth = 0;
+            e.rim = true;
+            if (e.kind == Kind::Pulsar) {
+                for (int d : {-1, 1}) {
+                    auto spark = makeEnemy(Kind::PulsarSpark, e.lane, 0, d);
+                    spark.rim = true;
+                    children.push_back(spark);
+                }
+                e.dead = true;
+                return;
+            }
+            if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane))
+                hit();
+        }
+    };
     while (!impacts.empty()) {
         auto impact = impacts.top();
         impacts.pop();
+        if (impact.kind == -3) {
+            auto index = size_t(impact.enemy);
+            auto &e = enemies[index];
+            if (!e.dead && !motion[index].sparkContact && (!zapped || infiniteZap)) {
+                if (e.kind == Kind::Tanker || e.kind == Kind::FuseTanker ||
+                    e.kind == Kind::PulsarTanker)
+                    openTanker(e, children);
+                else
+                    destroy(e, true);
+                zapped = true;
+                if (zapSingle)
+                    zapActive = false;
+            }
+            continue;
+        }
+        if (impact.kind == -2) {
+            auto index = size_t(impact.enemy);
+            if (motion[index].shotLane == lane && std::abs(motion[index].depth) <= 2.f / 160) {
+                hit();
+                motion[index].sparkContact = deathTime > 0;
+            }
+            continue;
+        }
+        if (impact.shot == shots.size()) {
+            contact(size_t(impact.enemy));
+            continue;
+        }
         auto &shot = shots[impact.shot];
         if (shot.dead)
             continue;
         bool powered = boost && !shot.ally;
         if (impact.enemy < 0) {
+            if (spikeHit[size_t(shot.lane)])
+                continue;
+            auto serial = spikeSerials[size_t(shot.lane)];
+            if (shot.bornFrame == sourceFrame && shot.creatorSerial < serial)
+                continue;
+            if (shot.serial > serial && shot.depth >= 1)
+                continue;
+            float depth = shot.serial > serial ? shot.depth : shot.previous;
             auto &tip = spikes[size_t(shot.lane)];
-            if (!hasSpike(shot.lane))
+            if (!hasSpike(shot.lane) || std::abs(int(std::floor(30.0 + double(depth) * 160)) -
+                                                 int(std::floor(30.0 + double(tip) * 160))) >= 6)
                 continue;
-            // Earlier bullets may have shortened this spike. Reschedule this
-            // contact at its new tip instead of consuming a shot in empty space.
-            if (tip != impact.depth) {
-                if (hasSpike(shot.lane) && shot.previous <= tip && shot.depth >= tip)
-                    impacts.push({(tip - shot.previous) / (shot.depth - shot.previous), tip,
-                                  impact.shot, -1, -1, shot.lane});
-                continue;
-            }
+            spikeHit[size_t(shot.lane)] = true;
             bool super = superSpikes[size_t(shot.lane)];
             if (!powered || super)
                 shot.dead = true;
@@ -1157,6 +1386,7 @@ void Game::tick(float dt) {
             // colok: ordinary shots spatter harmlessly on super spikes;
             // xle3 consumes a laser ring but still returns a shortening hit.
             if (!super || powered) {
+                sounds.push_back({Sound::Spike, 524 + (int(std::round((1 - tip) * 160)) & 511)});
                 tip += 3.f / 160;
                 addScore(3);
                 if (tip > 1.000001f) {
@@ -1171,7 +1401,7 @@ void Game::tick(float dt) {
             continue;
         }
         auto &e = enemies[size_t(impact.enemy)];
-        if (e.dead || enemyHit[size_t(impact.enemy)])
+        if (e.dead || enemyHit[size_t(impact.enemy)] || motion[size_t(impact.enemy)].sparkContact)
             continue;
         enemyHit[size_t(impact.enemy)] = true;
         if (motion[size_t(impact.enemy)].turnBegan) {
@@ -1195,10 +1425,14 @@ void Game::tick(float dt) {
         } else if (e.kind == Kind::Mirror) {
             --e.hp;
             if (e.hp > 0)
-                e.depth += enemySpeed(Kind::Mirror) * 16 / 60;
+                e.depth = motion[size_t(impact.enemy)].depth + enemySpeed(Kind::Mirror) * 16 / 60;
             if (e.hp > 0 && e.depth <= 1) {
                 shot.dead = shot.takenOver = true; // mcollie takes over even a particle-laser ring.
-                auto reflection = makeEnemy(Kind::MirrorShot, e.lane, impact.depth, 1);
+                float bulletDepth = shot.serial > e.serial ? shot.depth : shot.previous;
+                auto reflection = makeEnemy(Kind::MirrorShot, e.lane, bulletDepth, 1);
+                reflection.serial = shot.serial;
+                if (shot.serial < e.serial)
+                    reflection.depth -= shotSpeed() / 60;
                 reflection.ally = shot.ally;
                 children.push_back(reflection);
                 burst(enemyPosition(e), 1, 8);
@@ -1210,21 +1444,23 @@ void Game::tick(float dt) {
         } else if (e.kind == Kind::Beast &&
                    motion[size_t(impact.enemy)].flipperMotion == FlipperMotion::Climbing &&
                    e.hp > 1) {
-            --e.hp;
-            e.depth = motion[size_t(impact.enemy)].depth;
-            e.motion = FlipperMotion::Climbing;
-            e.rim = false;
+            int hp = e.hp - 1;
+            e = motion[size_t(impact.enemy)].before;
+            e.hp = hp;
             shot.dead = true;
             shot.takenOver = true;
-            auto reflection = makeEnemy(Kind::BeastShot, e.lane, impact.depth, 1);
+            float bulletDepth = shot.serial > e.serial ? shot.depth : shot.previous;
+            auto reflection = makeEnemy(Kind::BeastShot, e.lane, bulletDepth, 1);
+            reflection.serial = shot.serial;
+            if (shot.serial < e.serial)
+                reflection.depth -= shotSpeed() / 120;
             reflection.ally = shot.ally;
             reflection.hp = e.hp; // Preserve the shed beast stage for rendering.
             children.push_back(reflection);
         } else if (e.kind == Kind::Adroid &&
                    motion[size_t(impact.enemy)].droidMotion == DroidMotion::Climbing) {
             shot.dead = true;
-            e.droidMotion = DroidMotion::Climbing;
-            e.rim = false;
+            e = motion[size_t(impact.enemy)].before;
             e.depth = motion[size_t(impact.enemy)].depth + enemySpeed(Kind::Flipper) * 32 / 60;
             if (e.depth >= 1)
                 destroy(e);
@@ -1237,93 +1473,15 @@ void Game::tick(float dt) {
             destroy(e);
         }
     }
-    // A stopped flipper checks bullets before capturing the player (stdstop).
-    // During an invulnerable turn it can instead catch the lane it is leaving.
-    for (size_t index = 0; index < enemies.size(); ++index) {
-        auto &e = enemies[index];
-        const auto &frame = motion[index];
-        if (e.dead || e.entering || e.kind == Kind::Powerup)
-            continue;
-        if (reflected(e.kind)) {
-            if (e.lane == lane && frame.depth >= -2.f / 160 && e.depth <= 2.f / 160) {
-                hit();
-                if (deathTime > 0)
-                    e.dead = true;
-            }
-            if (e.depth < -29.f / 160) // refsht removes at Z<1; webz=110, rim Z=30.
-                e.dead = true;
-            continue;
-        }
-        if (e.kind == Kind::EnemyShot) {
-            if (e.depth <= 0) {
-                if (e.lane == lane)
-                    hit();
-                e.dead = true;
-            }
-            continue;
-        }
-        if (e.kind == Kind::PulsarSpark) {
-            if (frame.sparkContact)
-                continue;
-            e.sparkTime -= dt;
-            while (e.sparkTime <= .000001f) {
-                e.sparkTime += 5.f / 60; // prop_del=$0404: expire after five 60 Hz updates.
-                int next = e.lane + e.direction;
-                if (!web.closed && (next < 0 || next >= web.lanes()))
-                    e.direction = -e.direction;
-                e.lane = boundedLane(e.lane + e.direction);
-            }
-            continue;
-        }
-        if (flipperBody(e)) {
-            bool catches = !e.emerging && std::abs(e.depth) <= 2.f / 160 &&
-                           (frame.turning ? !shotVulnerable(e) && e.turnFrom == lane
-                                          : e.rim && e.lane == lane);
-            if (catches) {
-                hit(true);
-                if (deathTime > 0 && snatched)
-                    e.dead = true;
-            }
-            continue;
-        }
-        if (e.kind == Kind::Pulsar && pulseActive() && e.lane == lane)
-            hit();
-        if (e.kind == Kind::Adroid) {
-            if (frame.droidMotion == DroidMotion::Zapping && frame.shotLane == lane)
-                hit();
-            continue; // Patrol is above the rim; it only kills while zapping.
-        }
-        if (e.kind == Kind::Fuseball) {
-            if (frame.fuseMotion == FuseMotion::Crossing && std::abs(e.depth) <= 2.f / 160 &&
-                frame.shotLane == lane)
-                hit();
-            continue;
-        }
-        bool tanker =
-            e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker;
-        if (tanker && e.depth <= 0) {
-            e.depth = 0;
-            openTanker(e, children);
-            continue;
-        }
-        if (e.depth <= 0) {
-            e.depth = 0;
-            e.rim = true;
-            if (e.kind == Kind::Pulsar) {
-                for (int d : {-1, 1}) {
-                    auto spark = makeEnemy(Kind::PulsarSpark, e.lane, 0, d);
-                    spark.rim = true;
-                    children.push_back(spark);
-                }
-                e.dead = true;
-                continue;
-            }
-            if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane))
-                hit();
-        }
-    }
+    if (zapFrame && (!zapped || infiniteZap))
+        zapActive = false;
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [](auto &e) { return e.dead; }),
                   enemies.end());
+    for (auto &child : children)
+        if (!child.serial)
+            child.serial = nextSerial++;
+    for (auto &child : pending)
+        child.serial = nextSerial++;
     enemies.insert(enemies.end(), children.begin(), children.end());
     enemies.insert(enemies.end(), pending.begin(), pending.end());
     pending.clear();
@@ -1333,13 +1491,13 @@ void Game::tick(float dt) {
                                position(float(shot.lane), shot.depth),
                                {},
                                0,
-                               10,
+                               7,
                                0,
                                1,
                                shot.ally});
-    shots.erase(std::remove_if(shots.begin(), shots.end(),
-                               [](auto &s) { return s.dead || s.depth > 1.05f; }),
-                shots.end());
+    shots.erase(
+        std::remove_if(shots.begin(), shots.end(), [](auto &s) { return s.dead || s.depth >= 1; }),
+        shots.end());
     // r_end/szoom: after generation ends, leave as soon as the furthest
     // counted enemy reaches the rim. Pickups/spikes do not hold the wave open;
     // alien bullets do. Rim enemies need not be killed before clearance.

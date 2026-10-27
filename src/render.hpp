@@ -22,9 +22,13 @@ class Renderer {
         unsigned texture = 0;
         int width = 0, height = 0;
         Mode previous = Mode::Menu;
+        FrontPage previousPage = FrontPage::Title;
         bool seeded = false;
         float started = -100, lastTime = 0;
+        uint64_t startFrame = 0, lastFrame = 0;
     };
+    unsigned feedbackProgram = 0, cryEncodeTexture = 0, cryPaletteTexture = 0;
+    void initFeedback();
     std::array<MeltState, 5> meltStates{}; // XR eyes, SBS preview eyes, desktop.
     void line(Vec3 a, Vec3 b, Color c);
     void flush();
@@ -33,14 +37,14 @@ class Renderer {
     void particleMessage(const Game &g, bool headset);
     void bonusWorld(const Game &g);
     void tunnelWorld(const Game &g);
-    void headsetHud(const Game &g);
     void effectsWorld(const Game &g);
     void deathWorld(const Game &g);
     bool mesh(std::string_view name, Vec3 center, Vec3 tangent, Vec3 normal, float scale,
               Color tint, float angle = 0, float fold = 1);
 
   public:
-    void world(const Game &g, bool headset = false);
+    void world(const Game &g, bool headset = false, bool drawHud = true);
+    void headsetHud(const Game &g);
     void desktop(const Game &g, int width, int height);
     static std::vector<std::string> bonusInstructions(const Game &g);
     void hud(const Game &g, int width, int height, const std::string &status, float sensitivity,
@@ -51,5 +55,6 @@ class Renderer {
     static void rect(float x, float y, float w, float h, Color color);
     static std::vector<std::string> xrHudLines(const Game &g);
     static bool originalArtAvailable();
+    static Color originalColor(int hue, int intensity = 255, float alpha = 1);
 };
 } // namespace tempest

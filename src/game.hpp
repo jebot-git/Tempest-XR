@@ -3,6 +3,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <random>
 #include <string>
 #include <vector>
@@ -63,7 +64,17 @@ enum class Sound {
     FlipperLand,
     TankerOpen,
     MirrorReflect,
-    AlienBonus
+    AlienBonus,
+    Spike,
+    PowerupSpawn
+};
+struct SoundCue {
+    Sound sound;
+    int pitch = 0;
+    SoundCue(Sound sound, int pitch = 0) : sound(sound), pitch(pitch) {}
+    operator Sound() const {
+        return sound;
+    }
 };
 enum class SpikerMotion { Seeking, Climbing, Descending };
 enum class FuseMotion { Climbing, Crossing };
@@ -76,6 +87,7 @@ struct Enemy {
     int direction = 1;
     bool rim = false, dead = false;
     bool emerging = false, entering = false, ally = false;
+    uint64_t serial = 0;
     int pickupFrames = 0;
     int rail = -1;
     int hp = 1;
@@ -97,6 +109,8 @@ struct Shot {
     float depth = 0, previous = 0;
     bool dead = false;
     bool ally = false, takenOver = false;
+    uint64_t serial = 0, bornFrame = UINT64_MAX, creatorSerial = 0;
+    int tableSlot = -1;
 };
 enum class EffectKind { Rings, Sphere, Splatter, Firework, Pickup, Score };
 struct Effect {
@@ -133,12 +147,30 @@ struct ScoreEntry {
     bool beastly = false;
 };
 struct AccessKey {
-    int unlocked = 1;
+    int unlocked = 0;
     bool beastly = false;
+    std::string initials = "...";
+};
+enum class FrontPage {
+    Title,
+    Scores,
+    Credits,
+    Tutorial,
+    Demo,
+    Keys,
+    GameOver,
+    Congratulations,
+    Initials
 };
 class Game {
     std::mt19937 random;
-    float fireTimer = 0, transitionTimer = 0, wheelRemainder = 0;
+    int fireFrames = 3, nextBulletSlot = 0;
+    bool bulletExpanded = false;
+    int claimBulletSlot();
+    double sourceClock = 0;
+    uint64_t sourceFrame = 0, nextSerial = 1, droidSerial = 0;
+    void tickStep(float dt);
+    float transitionTimer = 0, wheelRemainder = 0;
     int kills = 0, nextLife = 20000;
     Mode pausedFrom = Mode::Playing;
     Vec3 nextSpawn;
@@ -149,8 +181,10 @@ class Game {
     float returnTime = 0, rechargeDelay = 0;
     int pendingBonus = -1, bonusBaseLevel = 1;
     std::vector<int> spawnTimers;
-    double generationClock = 0, zapClock = 0, droidClock = 0;
-    int zapFrames = 0, droidSteps = 0, droidFrom = 0, droidTo = 0, droidFireFrames = 5;
+    std::vector<uint64_t> spikeSerials;
+    double generationClock = 0, droidClock = 0;
+    uint64_t zapLastFrame = 0;
+    int droidSteps = 0, droidFrom = 0, droidTo = 0, droidFireFrames = 5;
     bool zapActive = false, zapSingle = false, infiniteZap = false;
     double effectClock = 0;
     int fireworkWait = 1, fireworkDuration = 80, fireworkColor = 0;
@@ -161,14 +195,35 @@ class Game {
     void tickFireworks();
     void surprisePowerup();
     void offerHighScore();
+    void tickFrontend(float dt, bool sourceUpdate);
+    bool pendingScore = false;
+    int runHighest = 1, keyCursor = 0;
+    float frontAge = 0;
+    int frontTicks = 0;
+    void awardKey();
     void startZap(bool single = false, bool infinite = false);
     void tickZap(float dt);
+    bool zapEligible(const Enemy &e) const;
     void tickDroid(float dt);
     void animateClearance(float dt);
     std::vector<Enemy> pending;
     int killsToPowerup = 1, bonusCourse = 0;
     std::array<int, 3> bonusRuns{};
-    float bonusCheckTime = 0, bonusResultTime = 0;
+    float bonusResultTime = 0;
+    int32_t gateCounter = 0x100000;
+    int gateTimer = 0, gateNext = 0;
+    double bonusClock = 0;
+    std::vector<int64_t> gateLaunches;
+    int32_t bonusVelocityFixed = 0x8000;
+    int64_t bonusGroundFixed = 0;
+    void planBonusGates();
+    void advanceBonusGenerator();
+    int rotarySensitivity = 0x2000;
+    bool rotaryMoved = false;
+    unsigned secondaryHorizontal = 0, secondaryVertical = 0;
+    bool secondaryConnected = false;
+    float padHorizontalVelocity = 0;
+    void tickRotaryCalibration();
     bool lastPulse = false;
     int alienFireCounter = 112;
     struct TunnelPattern {
@@ -221,8 +276,25 @@ class Game {
                                            {"FUR", 50000}}};
     std::array<AccessKey, 4> accessKeys{};
     inline static constexpr const char *keyNames[] = {"YAK", "COW", "ZOO", "AXE"};
-    int accessKey = 0, recordsVersion = 0;
-    bool enteringScore = false;
+    int accessKey = -1, recordsVersion = 0;
+    FrontPage frontPage = FrontPage::Title;
+    std::shared_ptr<Game> attractGame;
+    int scoreChoice = 0;
+    float scoreWheelPosition = 0;
+    void activate();
+    void returnToTitle();
+    std::vector<std::string> frontendLines() const;
+    int frontendFrame() const {
+        return frontTicks;
+    }
+    int savedKeyCursor() const {
+        return keyCursor;
+    }
+    static int checkpoint(int reached) {
+        return std::max(1, ((std::min(reached, 99) - 2) & ~1) + 1);
+    }
+    bool enteringScore = false, enteringBrag = false;
+    std::string brag = "BEAST";
     std::string scoreInitials = "AAA";
     int scoreCursor = 0;
     void finishScoreEntry();
@@ -237,7 +309,8 @@ class Game {
         bonusesPlayed = 0;
     double waveTime = 0;
     float time = 0, visualLane = 0, jumpTime = 0, jumpCooldown = 0, invulnerable = 0, flash = 0;
-    bool fireHeld = false, boost = false;
+    bool fireHeld = false, boost = false, strictRotaryLimits = false;
+    float bonusVerticalLimit() const;
     bool jumpEnabled = false, droidActive = false, bonusUp = false, bonusDown = false,
          bonusWon = false, bonusFinished = false;
     bool droidPending = false, earlyDroid = false;
@@ -274,7 +347,20 @@ class Game {
     Vec3 deathOrigin() const {
         return deathShip;
     }
+    int enginePitch = 10, engineVolumePhase = 0;
     float zapTime = 0, messageTime = 0, messageDuration = 1;
+    int messageFrame = 0, messageHold = 100;
+    float messageScaleX = 1, messageScaleY = 1, messageShearX = 0, messageShearY = 0;
+    void showMessage(const std::string &text, int hold = 100);
+    void rotary(float notches);
+    float rotaryMultiplier() const {
+        return float(rotarySensitivity) / 0x2000;
+    }
+    void secondaryPad(unsigned horizontal, unsigned vertical, bool connected = true) {
+        secondaryConnected = connected;
+        secondaryHorizontal = horizontal & 3;
+        secondaryVertical = vertical & 3;
+    }
     std::string message;
     std::vector<Enemy> enemies;
     std::vector<Shot> shots;
@@ -286,13 +372,16 @@ class Game {
     static bool reflected(Kind kind) {
         return kind == Kind::MirrorShot || kind == Kind::BeastShot;
     }
+    uint64_t frameNumber() const {
+        return sourceFrame;
+    }
     int pulsePhase() const;
     float shotSpeed() const {
         return (boost ? 4.5f : 3.5f) * 60 / 160 * (beastly ? .5f : 1.f);
     }
     std::vector<Effect> effects;
     std::vector<Particle> particles;
-    std::vector<Sound> sounds;
+    std::vector<SoundCue> sounds;
     explicit Game(uint32_t seed = 2000);
     void start(int startingLevel = 1, bool awardStart = false);
     void steer(float notches);
@@ -335,6 +424,9 @@ class Game {
     int bonusGateEffect(int gate) const;
     float bonusGateDistance(int gate) const;
     float bonusGateZ(int gate) const;
+    int32_t bonusGeneratorPhase() const {
+        return gateCounter;
+    }
     void startBonus(int type);
     float progress() const {
         return isBonus() ? float(bonusGate) / std::max(1, bonusGateCount())

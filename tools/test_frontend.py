@@ -87,46 +87,56 @@ with tempfile.TemporaryDirectory(prefix='tempest-frontend-') as temporary:
 
         try:
             for name, fields, unlocked in [('legacy5', '1.5 1 0 1 12345', 1),
-                                           ('legacy6', '1.5 1 0 1 12345 17', 17),
-                                           ('current9', '1.5 1 0 1 12345 17 .8 .3 .9', 17)]:
+                                           ('legacy6', '1.5 1 0 1 12345 35', 35),
+                                           ('current9', '1.5 1 0 1 12345 99 .8 .3 .9', 99)]:
                 data = base / name
                 prefs = data / 'de-xr/tempest-xr/settings'
                 prefs.parent.mkdir(parents=True)
                 prefs.write_text(fields + '\n')
                 def exercise():
-                    key('f')  # The removed hands-free toggle must remain absent.
-                    for _ in range(4):
-                        key('k')
-                    key('o')  # Locked Beastly must remain unavailable.
+                    key('f')
+                    key('Right')
+                    key('Right')
+                    xtest.fake_input(connection, X.ButtonPress, 4)
+                    xtest.fake_input(connection, X.ButtonRelease, 4)
+                    connection.sync()
                     key('Return')
                     key('f')
                     key('p')
                 result = run(name, data, exercise)
                 saved = prefs.read_text().split()
                 assert len(saved) == 9 and saved[3] == '0'
-                assert saved[5] == str(unlocked)
                 assert float(saved[6]) == (.8 if name == 'current9' else .9)
                 assert abs(float(saved[7]) - (.3 if name == 'current9' else .32)) < .001
                 assert result['paused'] and result['player_shots'] == 0 and not result['beastly']
-                assert result['score'] == (unlocked - 1) * (2600 + 200 * (unlocked - 1))
+                assert result['score'] == 0 and result['access_key'] == -1
                 records = json.loads(prefs.with_name('records.json').read_text())
-                assert records['key'] == 0 and records['keys'][0]['unlocked'] == unlocked
-                assert records['keys'][1]['unlocked'] == 1
-                assert records['scores'][0]['initials'] == 'YAK'
-                print(name + ': old fire preference ignored; native keys, rewards and save passed', flush=True)
-            records['keys'][0]['beastly'] = True
-            records['scores'][0]['initials'] = 'XR2'
-            records['scores'][0]['score'] = 600000
-            prefs.with_name('records.json').write_text(json.dumps(records))
-            def beastly():
-                key('o')
+                assert records['version'] == 2 and len(records['key_bytes']) == 16
+                assert records['key_bytes'][3::4] == [0, 0, 0, 0]
+                print(name + ': stage selection absent; normal start is web 1; legacy controls preserved', flush=True)
+            legacy = dict(version=1, scores=records['scores'], keys=[
+                dict(unlocked=35, beastly=True), dict(unlocked=1),
+                dict(unlocked=1), dict(unlocked=1)])
+            prefs.with_name('records.json').write_text(json.dumps(legacy))
+            def use_key():
+                key('k')
                 key('Return')
                 key('p')
-            result = run('beastly-reload', data, beastly)
-            assert result['beastly'] and result['score'] == 2 * 16 * (2600 + 16 * 200)
+            result = run('key-migration', data, use_key)
+            assert result['access_key'] == 0 and result['score'] == 32 * (2600 + 32 * 200)
             restored = json.loads(prefs.with_name('records.json').read_text())
-            assert restored['scores'][0]['initials'] == 'XR2' and restored['keys'][0]['beastly']
-            print('Beastly unlock and score-table reload passed', flush=True)
+            assert restored['key_bytes'][:4] == [ord('y'), ord('a'), ord('k'), 32]
+            assert restored['beastly_unlocked']
+            def beastly():
+                key('o')
+                key('k')
+                key('Return')
+                key('p')
+            result = run('beastly-key-reload', data, beastly)
+            assert result['beastly'] and result['score'] == 2 * 32 * (2600 + 32 * 200)
+            restored = json.loads(prefs.with_name('records.json').read_text())
+            assert restored['key_bytes'][:4] == [ord('y'), ord('a'), ord('k'), 32]
+            print('Original checkpoint key migration, key-only resume and Beastly reload passed', flush=True)
         finally:
             connection.close()
             server.terminate()

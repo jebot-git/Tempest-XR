@@ -34,7 +34,7 @@ void Game::tickEffects(float dt) {
                                                     (fx.kind == EffectKind::Firework ? 63 : 0);
                                      }),
                       effects.end());
-        if (mode == Mode::Victory)
+        if (mode == Mode::Victory || enteringScore)
             tickFireworks();
     }
 }
@@ -54,7 +54,8 @@ void Game::tickFireworks() {
                                     -fireworkVelocity.z * 1.2f},
                                    0,
                                    fireworkDuration,
-                                   fireworkColor});
+                                   fireworkColor,
+                                   2});
         } else if (command == 'd')
             fireworkDuration = byte();
         else if (command == 'c')
@@ -103,53 +104,173 @@ void Game::tickFireworks() {
     }
 }
 void Game::offerHighScore() {
-    if (score <= highScores.back().score)
+    pendingScore = score >= highScores.back().score;
+    bool keyPossible =
+        (accessKey >= 0 && accessKeys[size_t(accessKey)].unlocked) ||
+        (runHighest > 17 && std::any_of(accessKeys.begin(), accessKeys.end(), [&](const auto &k) {
+             return !k.unlocked || checkpoint(runHighest) > k.unlocked;
+         }));
+    if (!pendingScore && !keyPossible) {
+        frontPage = FrontPage::Scores;
+        frontAge = 0;
+        frontTicks = 0;
         return;
+    }
     enteringScore = true;
+    enteringBrag = false;
     wheelRemainder = 0;
-    scoreInitials = "AAA";
+    scoreChoice = 0;
+    scoreWheelPosition = 0;
+    scoreInitials = "...";
     scoreCursor = 0;
+    frontPage = FrontPage::Initials;
+    fireworkPC = 0;
+    fireworkWait = 1;
+    fireworkStack.clear();
+    effects.clear();
+    if (accessKey >= 0 && accessKeys[size_t(accessKey)].unlocked) {
+        scoreInitials = accessKeys[size_t(accessKey)].initials;
+        finishScoreEntry(); // getinitials reuses the selected key's signature.
+    }
 }
 void Game::setScoreLetter(char letter) {
-    if (!enteringScore || !((letter >= 'A' && letter <= 'Z') || (letter >= '0' && letter <= '9')))
+    if (!enteringScore ||
+        std::string("ABCDEFGHIJKLMNOPQRSTUVWXYZ .!-").find(letter) == std::string::npos)
         return;
     scoreInitials[size_t(scoreCursor)] = letter;
-    scoreCursor = std::min(2, scoreCursor + 1);
+    if (++scoreCursor == (enteringBrag ? 5 : 3))
+        finishScoreEntry();
 }
 void Game::nextScoreLetter() {
     if (!enteringScore)
         return;
-    if (scoreCursor == 2)
+    if (scoreChoice == 30) {
+        if (scoreCursor)
+            scoreInitials[size_t(--scoreCursor)] = '.';
+    } else if (scoreChoice == 31)
         finishScoreEntry();
     else
-        ++scoreCursor;
+        setScoreLetter("ABCDEFGHIJKLMNOPQRSTUVWXYZ .!-"[scoreChoice]);
 }
 void Game::finishScoreEntry() {
     if (!enteringScore)
         return;
     enteringScore = false;
     wheelRemainder = 0;
-    auto insertion = std::find_if(highScores.begin(), highScores.end(),
-                                  [&](const auto &entry) { return score > entry.score; });
-    if (insertion != highScores.end()) {
-        std::move_backward(insertion, highScores.end() - 1, highScores.end());
-        *insertion = {scoreInitials, score, level, beastly};
+    if (enteringBrag) {
+        brag = scoreInitials;
+        enteringBrag = false;
         ++recordsVersion;
+        frontPage = FrontPage::Scores;
+        frontAge = 0;
+        frontTicks = 0;
+        return;
     }
+    bool first = pendingScore && score >= highScores.front().score;
+    if (pendingScore) {
+        auto place = std::find_if(highScores.begin(), highScores.end(),
+                                  [&](const auto &entry) { return score >= entry.score; });
+        if (place != highScores.end()) {
+            std::move_backward(place, highScores.end() - 1, highScores.end());
+            *place = {scoreInitials, score, level, beastly};
+        }
+    }
+    awardKey();
+    ++recordsVersion;
+    if (first) {
+        enteringBrag = enteringScore = true;
+        scoreInitials = ".....";
+        scoreCursor = 0;
+        scoreChoice = 0;
+        scoreWheelPosition = 0;
+        frontPage = FrontPage::Initials;
+        return;
+    }
+    frontPage = FrontPage::Scores;
+    frontAge = 0;
+    frontTicks = 0;
 }
-void Game::storeAccessKey() {
-    auto &key = accessKeys[size_t(accessKey)];
-    key.unlocked = std::max(key.unlocked, unlockedLevel);
-    key.beastly = key.beastly || beastlyUnlocked;
+void Game::awardKey() {
+    if (accessKey >= 0 && accessKeys[size_t(accessKey)].unlocked) {
+        accessKeys[size_t(accessKey)].unlocked = checkpoint(runHighest);
+        return;
+    }
+    if (runHighest <= 17)
+        return;
+    int resume = checkpoint(runHighest);
+    auto found = std::find_if(accessKeys.begin(), accessKeys.end(), [&](const auto &k) {
+        return k.unlocked && k.initials == scoreInitials;
+    });
+    if (found == accessKeys.end())
+        found = std::find_if(accessKeys.begin(), accessKeys.end(),
+                             [](const auto &k) { return !k.unlocked; });
+    if (found == accessKeys.end()) {
+        found = accessKeys.begin();
+        for (auto it = accessKeys.begin(); it != accessKeys.end(); ++it)
+            if (it->unlocked <= found->unlocked)
+                found = it;
+        if (found->unlocked >= runHighest)
+            return;
+    }
+    if (found->initials != scoreInitials || found->unlocked < resume)
+        *found = {resume, beastly, scoreInitials};
 }
+void Game::storeAccessKey() { /* Keys are awarded only by the end-of-game initials flow. */ }
 void Game::selectAccessKey() {
     if (mode != Mode::Menu)
         return;
-    storeAccessKey();
-    accessKey = (accessKey + 1) % int(accessKeys.size());
-    unlockedLevel = selectedLevel = accessKeys[size_t(accessKey)].unlocked;
-    beastlyUnlocked = accessKeys[size_t(accessKey)].beastly;
-    beastly = false;
-    ++recordsVersion;
+    frontPage = FrontPage::Keys;
+    frontAge = 0;
+    frontTicks = 0;
+    keyCursor = 0;
+    for (int i = 0; i < 4; ++i)
+        if (accessKeys[size_t(i)].unlocked) {
+            keyCursor = i;
+            break;
+        }
+}
+void Game::planBonusGates() {
+    gateLaunches.assign(size_t(bonusGateCount()), 0);
+    int32_t counter = gateCounter;
+    int timer = 0, next = 0;
+    int64_t ground = 0;
+    while (next < bonusGateCount()) {
+        ground += bonusVelocityFixed;
+        counter -= bonusVelocityFixed;
+        if (counter >= 0)
+            continue;
+        counter += 12 << 16;
+        if (--timer >= 0)
+            continue;
+        gateLaunches[size_t(next)] = ground;
+        timer = bonusGateDelay(next++);
+    }
+}
+void Game::advanceBonusGenerator() {
+    gateCounter -= bonusVelocityFixed;
+    if (gateCounter >= 0)
+        return;
+    gateCounter += 12 << 16;
+    if (--gateTimer >= 0 || gateNext >= bonusGateCount())
+        return;
+    gateLaunches[size_t(gateNext)] = bonusGroundFixed;
+    gateTimer = bonusGateDelay(gateNext++);
+}
+void Game::rotary(float notches) {
+    if (!std::isfinite(notches))
+        return;
+    if (mode == Mode::Menu || enteringScore) {
+        steer(notches);
+        return;
+    }
+    if (!rotaryMoved)
+        rotarySensitivity = std::min(0x5000, rotarySensitivity + 0x1000);
+    rotaryMoved = true;
+    steer(notches * rotaryMultiplier());
+}
+void Game::tickRotaryCalibration() {
+    if (!rotaryMoved && rotarySensitivity > 0x2000)
+        rotarySensitivity -= 0x200;
+    rotaryMoved = false;
 }
 } // namespace tempest

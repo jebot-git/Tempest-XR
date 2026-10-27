@@ -138,9 +138,9 @@ and building follow `newspike`/`climbspike`/`descendspike`; spike damage follows
 `colok`/`xle3`/`decspike`. In particular, a normal shot spatters harmlessly on a
 super spike, while a laser ring is consumed **and returns a shortening hit**.
 The reflected mirror ring uses the `ringbull` raster rectangle in `pic2`; shed
-beast parts retain the corresponding `hornm2`/`hornm3` meshes. The modern swept
-impact system and object collections do not reproduce Jaguar list allocation
-or every sub-frame ordering detail.
+beast parts retain the corresponding `hornm2`/`hornm3` meshes. Native actor serials reproduce newest-first source update order, with a live
+round-robin bullet table and integer Z-window tests. C++ collections and an
+allocation ledger replace physical Jaguar linked-list memory.
 
 ## Rotary bonus controls
 
@@ -159,13 +159,18 @@ decaying impulse. The initial `iycon` position/velocity and initial viewport
 position are distinguished. Source downward Y is converted to upward OpenGL Y
 for the gate coordinates and crosshair together.
 
-This translation follows the primary rotary/A-C controls. The preserved,
-unreleased rotary branch also falls through into a secondary-pad path; that
-extra pad pass is excluded for the single-mouse interface. Vertical meter-space
-bounds remain the recreation's wider bounds so its imported courses remain
-navigable. Hardware adaptive rotary sensitivity and exact original projection
-remain adaptations. Tunnel `tunrun` already accumulated rotary momentum without
-friction; it continues to use wheel-only rotation and opposite input for braking.
+Physical mouse input now uses `rroco` adaptive sensitivity: `$2000` initially,
+`+$1000` per active source update up to `$5000`, and `-$200` on idle updates.
+Logical keyboard/test steering remains uncalibrated. The preserved secondary-pad
+fall-through runs when a second SDL gamepad is connected, with separate X
+inertia and an additional Y inertial pass. `inertcon` checks the previous
+position and permits one-step overshoot.
+
+The source's literal `iycon` limit `$1400000`, after `>>3` and meter conversion,
+is ±1.25. The preserved course data contains gates beyond that limit, including
+Y=2. At the user's explicit choice, normal play uses max(1.25, maximum course
+|Y| + .25); `--strict-source-rotary` exposes literal bounds for diagnostics.
+Tunnel `tunrun` keeps frictionless rotary momentum and opposite-input braking.
 
 ## Gap fills and presentation boundaries
 
@@ -178,16 +183,27 @@ independent eight-slot ownership. Rendering particles do not each consume an
 object, just as the source GPU's dots do not each consume a linked-list entry.
 
 `beastrail`, `uppweb`, `flipcollie` and `crossrail` determine hit/zap eligibility.
-In particular `mcollie` bypasses the Superzapper for climbing beasts as well as
-mirrors and climbing hostile droids. A fuseball on a rail does not call `collie`.
-The port retains swept 120 Hz contact resolution rather than Jaguar list order.
+Mirrors and climbing hostile droids bypass the Superzapper through `mcollie`.
+The earlier audit overlooked the `_sz` checks at the start of `run_flipper` and
+`run_fuseball`: these make climbing beasts, turning flippers and rail-bound
+fuseballs zappable before their normal collision windows. Spark contact occurs
+before `collie`; zapped tankers still open their children.
+Combat uses a global 60 Hz clock, source actor serial order, bullet-table order,
+held-only firing countdowns and the integer `colok` Z window. Camera/interpolation
+continues at 120 Hz. New shot takeover keeps actor position and ownership;
+`xshot` starts at angle eight, advances three and expires above thirty (eight
+updates), while no longer occupying the live bullet table.
 
 `src/fireworks.hpp` contains the pinned `fw_test` bytes (yak.s:19124), executed
 by the `fw_run` command interpreter in `src/effects.cpp`. Flight counters,
 signed assignments, nested loops, waits, gravity and sphere expiry are translated;
 positions/velocities are scaled into XR meters. Ring/sphere and bullet/pickup
-feedback have independent lifecycles. Shaders and pixel projection use OpenGL,
-not an emulation of the GPU/blitter's integer CRY pipeline. Ring/psycho victory
+feedback have independent lifecycles. `src/cry.hpp` imports the hardware palette bases and first 256 CPU sine bytes.
+`render-feedback.cpp` quantizes RGB through a 32³ LUT and preserves CRY hue while
+saturating intensity at 384×240 feedback coordinates. Source transform constants
+are translated; translucent native composition and meter projection differ from
+the GPU/blitter's full integer rasterization. Current HUD/instructions draw
+after feedback so they remain legible and do not smear into framebuffer history. Ring/psycho victory
 uses the 401-frame `vicrun` interval and a pyramid/echo presentation. Music changes
 queue an outgoing fade for `domod`'s 51 frames at 48 kHz (40,800 PCM frames).
 
@@ -197,8 +213,13 @@ retained for diagnostics. Selected-web starts use `slebon`'s arithmetic;
 clearance itself adds no points. Point pickups implement `suprise`; One Up uses
 the 50-frame holiday except in the tunnel. Source PCM remains the only speech.
 
-The ten default scores and YAK/COW/ZOO/AXE access names come from `defaults`.
-Native JSON stores score initials and independent key progress/unlocks, replacing
-EEPROM bytes and write timing. The title's score/tutorial/credit carousel and
-keyboard option controls are native frontend adaptations; Classic/Plus and
-two-player game variants remain outside the Tempest 2000 campaign scope.
+The ten default scores and inactive YAK/COW/ZOO/AXE signatures come from
+`defaults`. A key is earned beyond displayed web 17; its odd resume web follows
+`getinitials`' subtraction/mask. Selected signatures are reused and their source
+checkpoint is rewritten at game end. `records.json` version 2 stores the original
+16-byte key payload, scores and five-character brag, with version-1 migration.
+New games start at one; the native key browser replaces free stage selection.
+The 32-character carousel includes DEL and END. Credits/congratulations use
+source text and a separate silent game supplies the attract demonstration.
+Page layout, mouse/keyboard hints and some transitions remain native adaptations;
+Classic/Plus/two-player variants and full original options are outside scope.

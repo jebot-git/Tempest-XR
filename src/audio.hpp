@@ -14,7 +14,7 @@ class Audio {
         double position = 0;
         float step = 1, gain = 1, pan = 0;
         double loopStart = 0, loopEnd = 0;
-        int priority = 0;
+        int priority = 0, pitchWord = 0;
         uint64_t serial = 0;
     };
     SDL_AudioDeviceID device = 0;
@@ -36,13 +36,16 @@ class Audio {
     int manualTrack = -1;
     int gatePeriod = 512;
     uint32_t random = 2000;
-    uint64_t voiceSerial = 0;
+    uint64_t voiceSerial = 0, lastModulationFrame = UINT64_MAX;
     static void callback(void *self, Uint8 *stream, int size);
 
   public:
     Audio();
     ~Audio();
-    void play(Sound sound);
+    void play(Sound sound) {
+        play(SoundCue{sound});
+    }
+    void play(SoundCue cue);
     void mute(bool value);
     void setMusicDirectory(const std::string &directory);
     void updateMusic(const Game &game, bool suspended = false);

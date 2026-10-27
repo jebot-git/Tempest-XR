@@ -45,6 +45,7 @@ void Game::tickSpecialEnemy(Enemy &e, float dt) {
                         continue;
                     spikes[size_t(e.lane)] = 1 - 30.f / 160;
                     spikePresent[size_t(e.lane)] = true;
+                    spikeSerials[size_t(e.lane)] = nextSerial++;
                     superSpikes[size_t(e.lane)] = randf(0, 256) < 2 * std::min(level - 1, 127);
                 }
                 e.buildFrames = 50;
@@ -137,6 +138,16 @@ void Game::tryAlienFire(Enemy &e, float dt, std::vector<Enemy> &children) {
             children.push_back(makeEnemy(Kind::EnemyShot, e.lane, e.depth, 1));
     }
 }
+int Game::claimBulletSlot() {
+    int size = bulletExpanded || droidActive ? 16 : 8;
+    for (int i = 0; i < size; ++i) {
+        int slot = nextBulletSlot++ & (size - 1);
+        if (std::none_of(shots.begin(), shots.end(),
+                         [&](const auto &s) { return !s.dead && s.tableSlot == slot; }))
+            return slot;
+    }
+    return -1;
+}
 size_t Game::shotSlots(bool ally) const {
     size_t remnants = size_t(std::count_if(effects.begin(), effects.end(), [=](const auto &fx) {
         return fx.kind == EffectKind::Splatter && fx.ally == ally;
@@ -183,39 +194,39 @@ bool Game::canGenerate() const {
 }
 void Game::startZap(bool single, bool infinite) {
     infiniteZap = infinite;
+    zapLastFrame = sourceFrame;
     zapActive = true;
     zapSingle = single;
-    zapClock = 0;
-    zapFrames = 0;
+
     zapTime = single ? .45f : 1.1f;
+}
+bool Game::zapEligible(const Enemy &e) const {
+    // run_flipper and run_fuseball check _sz before their shot windows.
+    // rumirr/refsht and climbing adroids use colok/mcollie, bypassing _sz.
+    return !e.dead && !e.entering && e.kind != Kind::Powerup && e.kind != Kind::Mirror &&
+           !reflected(e.kind) && !(zapSingle && e.kind == Kind::EnemyShot) &&
+           !(e.kind == Kind::Adroid && e.droidMotion == DroidMotion::Climbing);
 }
 void Game::tickZap(float dt) {
     if (!zapActive)
         return;
-    zapClock += double(dt) * 60;
-    while (zapClock >= 1 - .000001 && zapActive) {
-        zapClock -= 1;
-        if (++zapFrames % 4)
-            continue;
-        auto target = std::find_if(enemies.begin(), enemies.end(), [](const auto &e) {
-            return !e.dead && !e.entering && shotVulnerable(e) && e.kind != Kind::Powerup &&
-                   e.kind != Kind::Mirror && !reflected(e.kind) &&
-                   !(e.kind == Kind::Adroid && e.droidMotion == DroidMotion::Climbing) &&
-                   !(e.kind == Kind::Beast && e.motion == FlipperMotion::Climbing);
-        });
-        if (target == enemies.end()) {
+    (void)dt;
+    if ((sourceFrame & 3) != 0 || zapLastFrame == sourceFrame)
+        return;
+    zapLastFrame = sourceFrame;
+    do {
+        auto target = std::find_if(enemies.rbegin(), enemies.rend(),
+                                   [&](const auto &e) { return zapEligible(e); });
+        if (target == enemies.rend()) {
             zapActive = false;
-            continue;
+            break;
         }
         destroy(*target, true);
-        if (infiniteZap) {
-            zapFrames -= 4;
-            zapClock += 4;
-        }
         if (zapSingle)
             zapActive = false;
-    }
+    } while (infiniteZap && zapActive);
 }
+
 void Game::tickDroid(float dt) {
     droidClock += double(dt) * 60;
     while (droidClock >= 1 - .000001) {
@@ -228,6 +239,10 @@ void Game::tickDroid(float dt) {
             if (shotSlots(true) < 8 && physicalSlots() < 64) {
                 Shot shot{logicalLane};
                 shot.ally = true;
+                shot.tableSlot = claimBulletSlot();
+                shot.serial = nextSerial++;
+                shot.bornFrame = sourceFrame;
+                shot.creatorSerial = droidSerial;
                 shots.push_back(shot);
             }
         }
@@ -295,7 +310,7 @@ void Game::animateClearance(float dt) {
         shot.depth += dt * shotSpeed();
     }
     shots.erase(std::remove_if(shots.begin(), shots.end(),
-                               [](const auto &s) { return s.dead || s.depth > 1.05f; }),
+                               [](const auto &s) { return s.dead || s.depth >= 1; }),
                 shots.end());
     enemies.erase(
         std::remove_if(enemies.begin(), enemies.end(), [](const auto &e) { return e.dead; }),

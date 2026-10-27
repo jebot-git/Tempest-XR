@@ -51,7 +51,7 @@ int main() {
         g.fireHeld = false;
         g.enemies = {{Kind::Flipper, g.lane, .3f}};
         g.shots = {{g.lane, .29f, .28f}};
-        g.tick(.01f);
+        g.tick(1.f / 60);
         REQUIRE(std::none_of(g.enemies.begin(), g.enemies.end(),
                              [](auto &e) { return Game::hostile(e.kind); }));
         REQUIRE(g.score == 150);
@@ -59,7 +59,7 @@ int main() {
         g.start(3);
         g.enemies = {{Kind::Tanker, 5, .6f}};
         g.shots = {{5, .59f, .58f}};
-        g.tick(.01f);
+        g.tick(1.f / 60);
         g.enemies.erase(std::remove_if(g.enemies.begin(), g.enemies.end(),
                                        [](auto &e) { return e.kind == Kind::Powerup; }),
                         g.enemies.end());
@@ -75,17 +75,20 @@ int main() {
         REQUIRE(g.score == 0);
         advance(g, .15f);
         REQUIRE(g.score == 250);
+        REQUIRE(std::count_if(g.enemies.begin(), g.enemies.end(),
+                              [](auto &e) { return Game::hostile(e.kind); }) == 2);
         g.zap();
         REQUIRE(g.score == 250);
-        g.tick(.01f);
-        REQUIRE(std::none_of(g.enemies.begin(), g.enemies.end(),
-                             [](auto &e) { return Game::hostile(e.kind); }));
+        advance(g, .075f);
+        REQUIRE(g.score == 400);
+        REQUIRE(std::count_if(g.enemies.begin(), g.enemies.end(),
+                              [](auto &e) { return Game::hostile(e.kind); }) == 1);
         g.start();
         g.invulnerable = 0;
         g.enemies = {{Kind::Flipper, g.lane, 0}};
         g.jumpEnabled = true;
         g.jump();
-        g.tick(.01f);
+        g.tick(1.f / 60);
         REQUIRE(g.lives == 3);
         float cooldown = g.jumpCooldown;
         g.jumpEnabled = true;
@@ -94,9 +97,9 @@ int main() {
         g.start();
         g.invulnerable = 0;
         g.enemies = {{Kind::Flipper, g.lane, 0}};
-        g.tick(.01f);
+        g.tick(1.f / 30);
         REQUIRE(g.lives == 2);
-        g.tick(.01f);
+        g.tick(1.f / 60);
         REQUIRE(g.lives == 2);
         g.pause();
         float time = g.time, death = g.deathTime;
@@ -108,7 +111,7 @@ int main() {
         g.start();
         g.enemiesRemaining = 0;
         g.enemies = {{Kind::Flipper, 4, .5f}};
-        g.tick(.01f);
+        g.tick(1.f / 60);
         REQUIRE(g.mode == Mode::Playing);
         g.zap();
         advance(g, .075f);
@@ -129,13 +132,13 @@ int main() {
         REQUIRE(g.spikes[3] < .4f); // Superzapper leaves spikes behind.
         float tip = g.spikes[3];
         g.shots = {{3, tip - .005f, tip - .005f}};
-        g.tick(.01f);
+        g.tick(1.f / 60);
         REQUIRE(std::abs(g.spikes[3] - tip - 3.f / 160) < .00001f);
         g.start();
         g.invulnerable = 0;
         g.enemiesRemaining = 0;
         g.spikes[size_t(g.lane)] = .5f;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         REQUIRE(g.mode == Mode::Transition);
         advance(g, .7f);
         g.jumpEnabled = true;
@@ -146,7 +149,7 @@ int main() {
         g.invulnerable = 0;
         g.enemiesRemaining = 0;
         g.spikes[size_t(g.lane)] = .5f;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         advance(g, 1.4f);
         REQUIRE(g.lives == 2);
         // Ship-attached rig: rim movement pans, jump pushes back, pause freezes it.

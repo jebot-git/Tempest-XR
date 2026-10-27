@@ -4,20 +4,25 @@ Validated on Linux, 2026-10-27, with SDL 2.32.10, Mesa 26.0.8 and Intel
 ADL-N graphics. Physical headset/WiVRn validation remains outstanding.
 
 The installed build was smoke-tested from `/tmp` with the new tunnel. It loaded
-all 30 original effect samples and selected `tune3.mod`. All 45 installed
+all 30 original effect samples and selected `rave4.mod`. All 45 installed
 music/effect/art files match the tested repository assets by SHA256.
 
-The default OpenXR build passes all thirteen CTest suites. The build configured
-with `TEMPEST_OPENXR=OFF` passes its twelve applicable suites:
+The default OpenXR build passes all fourteen CTest suites. The build configured
+with `TEMPEST_OPENXR=OFF` passes its thirteen applicable suites:
 
+- Source frame fidelity: held-only countdowns/newborn shots, global zap phase
+  across title/new games, zap-before-window flipper/fuse handling, spark contact
+  priority, source actor ordering, persistent generator phase, message timing/
+  shear, adaptive rotary bounds/secondary pad, CRY and actual attract play.
 - Source gap regressions: collision-time beast/droid shields; shared paced zap
-  eligibility including fuse/beast immunity; exact launch ticks and 150-frame
-  pixel entry; safe pulsar activation; allocation/shot ownership and eleven-frame
-  shot remnants; open-web endpoints; every tunnel phase pair; retained clearance
+  handling; exact launch ticks and 150-frame pixel entry; safe pulsar activation;
+  allocation/shot ownership and eight-update shot remnants; open-web endpoints; every tunnel phase pair; retained clearance
   animation; rare exits, selected-web/Beastly scoring, pickup rez, fireworks and
   separate One Up graphic/holiday durations.
-- Score table/access keys: source defaults, rotary initials entry, ending and
-  Beastly unlock, per-key progress, atomic JSON round trips and invalid-file handling.
+- Score table/access keys: source defaults, rotary initials/brag entry, ending,
+  Beastly unlock, earned-signature thresholds, odd checkpoints, selected-signature
+  reuse, weakest-slot replacement, original key bytes, version-1 migration,
+  atomic JSON round trips and invalid-file handling.
 - Gameplay, steering, transitions and ship-follow camera.
 - Timed rim combat: source angular windows (including concave-web wrap), early
   and departed-shot misses, capture lanes, pause/jump, rotation/pause tuning,
@@ -158,16 +163,21 @@ also covered by CTest.
 uv run --no-project --with python-xlib python tools/test_frontend.py
 ```
 
-It launches the native desktop application four times against temporary data,
+It launches the native desktop application five times against temporary data,
 checks old five/six/nine-field preferences with legacy autofire enabled, verifies
-that F cannot enable unattended shots, changes all four access keys, starts the
-selected web through Enter, checks its reward, saves while paused, and reloads
-an unlocked Beastly profile and high-score table. All four runs pass; the user's
-preferences and desktop/runtime are not used. Output is in
-`artifacts/frontend-test/`.
+that F cannot enable unattended shots and the title cannot select arbitrary
+stages, then starts web 1. Two further launches migrate an earned key, resume
+web 33 with its source start reward, and reload the same key in Beastly mode.
+All five runs pass; the user's preferences and desktop/runtime are not used.
+Output is in `artifacts/frontend-test/`.
+
+The final source-frame implementation is checked under ASan/UBSan with leak
+detection in nine suites: fidelity, gap, records, gameplay, rim combat, source
+behavior, enemy AI, tunnel and campaign. All 24 courses use playable course-sized
+bounds; literal ±1.25 bounds are separately checked under strict diagnostics.
 
 The private simulated Monado run passes seven scenarios: 400 frames/399 stereo,
-144 warp frames reaching 13.9995 m, 102 jump frames; enemies, rings, tunnel,
+143 warp frames reaching 13.998 m, 102 jump frames; enemies, rings, tunnel,
 psychedelic, explosion and capture each produce 90 frames/89 stereo. This uses
 native EGL and the null compositor; it does not validate physical tracking.
 

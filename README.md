@@ -40,9 +40,9 @@ closed webs wrap, and open webs stop at their ends.
 | Left mouse | Start in XR/SBS; hold to fire repeatedly |
 | Right mouse / Z | Paced Superzapper: first use sweeps eligible enemies, second zaps one |
 | Middle mouse / Space | Jump after collecting the jump powerup |
-| Left/Right or A/D | Alternative steering / starting-web selection |
-| Enter | Start/retry; save initials when entering a high score |
-| K on title | Change saved player access key |
+| Left/Right or A/D | Alternative steering / saved-key selection |
+| Enter | Start/continue; finish initials or brag entry |
+| K on title | Browse earned player access keys |
 | O on title | Toggle Beastly replay after completing the campaign |
 | P / Escape | Pause/resume; Escape returns game-over/victory to title |
 | V | Enter native OpenXR / return the game to desktop |
@@ -50,7 +50,7 @@ closed webs wrap, and open webs stop at their ends.
 | Click / Enter while paused | Resume play after returning to the game |
 | R | Recenter the XR rig |
 | B | Half-SBS preview using the XR camera |
-| [ / ] | Wheel sensitivity, 0.25–4 lanes per detent |
+| [ / ] | Base wheel sensitivity, 0.25–4 lanes per detent |
 | I | Reverse wheel direction |
 | M | Mute music and effects |
 | N | Preview soundtrack modules until the next web/bonus/title |
@@ -70,7 +70,14 @@ Up/W and Down/S are keyboard alternatives. In the tunnel bonus,
 the wheel or Left/Right/A/D adjusts rotation speed; reverse to brake. Stay on
 the green track to grow the trail and score continuously. Going off track
 shrinks the trail; recover before it runs out. Instructions appear in desktop
-and XR views. These adapt the original rotary controller to a mouse.
+and XR views. Physical wheel input uses the source adaptive calibration: gain
+rises from 1× to 2.5× with movement and decays while idle. A connected second
+SDL gamepad's D-pad enables the preserved secondary-pad bonus control pass.
+
+Normal play uses course-sized vertical limits so every imported gate can be
+reached. `--strict-source-rotary` restores the preserved source's literal ±1.25
+vertical limit, including one-step overshoot. Some gates lie beyond that limit;
+this flag is for source diagnostics.
 
 ## Campaign
 
@@ -95,8 +102,9 @@ jump and fire to reach them. Enemy projectiles and a
 separately acquired friendly firing droid are implemented. Flippers climb to
 the rim before turning toward the ship. Their turning animation and shot
 vulnerability share the source angle state: a correctly timed shot can kill
-before capture, while an already departed shot misses. Hits resolve in impact
-order so an enemy farther down the lane cannot steal a shot from a rim target.
+before capture, while an already departed shot misses. Combat updates at 60 Hz using newest-first source actor order and bullet-table
+order; held-fire timers pause when LMB is released. Collision tests use source
+integer Z windows and the flipper's exact landing/turn window.
 
 Powerups progress through **particle laser → points → jump → points → friendly
 droid → bonus token**, followed by additional point awards. The first killed
@@ -112,12 +120,20 @@ pyramid/feedback victory scene for 401 source frames. Point pickups have the
 original rare early-exit/infinite-zap surprise. Clearance awards no flat bonus.
 
 Beastly doubles scores, halves player-shot speed, slows player firing, removes
-ordinary flipper pauses and permits eight alien bullets. The title screen shows
-the original default high-score table, instructions and credits. Qualifying
-scores accept three initials: wheel changes the current letter, LMB advances,
-RMB goes back, and Enter saves; typing is also supported. K selects one of four
-source access-key names, with independent unlocked webs and Beastly unlocks.
-`records.json` stores the table and keys alongside the existing `settings` file.
+ordinary flipper pauses and permits eight alien bullets. The title cycles through the original default high scores, credits, instructions
+and an actual silent attract game. Game Over waits for fire before score entry;
+the ending shows the normal or Beastly congratulations before the same flow.
+Qualifying scores accept three initials through the original 32-position rotary
+carousel, including DEL and END. LMB accepts, RMB deletes; Enter finishes and
+typing also works. The number-one score accepts a separate five-character brag.
+
+New games start at web 1. **K browses earned access keys**, with up to four
+three-character signatures. Progress beyond web 17 earns a key; resume points
+follow the source odd-web rule (reaching 18/19 saves 17; reaching 20 saves 19).
+Using a key reuses its signature at game end. The key records use the original
+16-byte signature/checkpoint layout inside version-2 `records.json`; existing
+version-1 progress is migrated. Beastly unlock is global. There is no free stage
+selection; `--level` remains a diagnostic flag.
 Pause, Game Over, victory, title and HUD text appear directly over the scene.
 
 Jump lasts 0.85 seconds with a three-second recharge. Enemy bullets can be
@@ -131,10 +147,10 @@ ship's passage along them during clearance. Every 20,000 points awards a life,
 including thresholds crossed by wave/bonus awards. An airborne jump continues
 across the next-web reset without a camera snap.
 
-Unlocked starting webs, best score and settings live in SDL's preferences
-directory (typically `~/.local/share/de-xr/tempest-xr/settings`). Progress saves
-at new-web checkpoints, game over, victory and normal exit. Demo/capture and
-explicit `--level` runs do not overwrite normal progress.
+Scores, earned keys and settings live in SDL's preferences directory (typically
+`~/.local/share/de-xr/tempest-xr/`). Keys are awarded through the end-of-game
+initials flow; preferences and completed records save atomically. Demo/capture
+and explicit `--level` runs do not overwrite normal progress.
 
 ## XR
 
@@ -188,8 +204,10 @@ zaps, powered fire, ricochets and voice announcements. Sample playback uses
 the included Imagitec driver's positive pitch conversion and loop metadata. The mixer
 allows two effects alongside music, or six without it. Death and Excellent use
 source detuned pairs; Recharge, gate, token and capture cues use paired samples.
-Engine loops accompany clearance; a clearance pickup triggers the original Yes
-loop. Ordinary arrival plays Warp, followed by Recharge after 80 source frames.
+Engine loops accompany clearance with source-frame pitch and opposed volume
+modulation; arrival whooshes descend in pitch. Spike shortening and pickup
+creation use their own source sample/pitch contexts. A clearance pickup triggers
+the original Yes loop. Ordinary arrival plays Warp, followed by Recharge after 80 source frames.
 **No synthetic speech or synthesized effect fallback is used.** Missing samples
 are silent; gameplay upgrade labels stay visual. Music, effects and recorded
 voices have independent volumes (defaults 90%, 32%, 90%), persisted with settings.
@@ -206,8 +224,12 @@ points, One Up and Game Over use source pixels; announcements shatter those
 pixels and font glyphs into the scene. Ring/psychedelic floors use the original
 swirly background texture. Effects also include colored explosions, Superzapper
 arcs, lane pulses, rainbow beam rings, ship trails and warp bridges/rings.
-Melt-o-vision-style scale/rotate/intensity feedback keeps independent histories
-for both XR eyes, SBS eyes and the desktop.
+Messages use the signed hold/tail countdown, scaling and animated source shear.
+Particle spheres use the four original densities, sine phases and CRY colors;
+score graphics expand as individual pixels. Scale/rotate feedback uses source
+384×240 sampling, source sine tables and saturating CRY intensity arithmetic,
+with independent histories for both XR eyes, SBS eyes and the desktop. Current
+HUD/instructions draw after feedback to remain readable. Native RGB-to-CRY quantization and translucent composition adapt it to the live XR view.
 
 ```sh
 ./build/tempest-xr --enemy-demo
@@ -267,8 +289,9 @@ streaming performance and comfort still require target-device validation.
 This remains a source-informed recreation. Source countdowns, distant-pixel
 entry, allocation/backpressure, independent shot ownership, friendly-droid
 pursuit, rare pickups, effect lifecycles, music fade and ending/Beastly flows
-have regression coverage. Collision ordering at 120 Hz, camera motion, mouse
-gain, XR projection, RGB shading and feedback are adapted. Original
-Classic/Plus/cooperative/head-to-head variants, full source option/attract
-choreography and physical EEPROM encoding remain outside this implementation.
+have regression coverage. Combat follows a 60 Hz source clock while camera
+motion renders continuously. XR projection, mouse sampling, native RGB-to-CRY
+quantization, feedback composition and some frontend choreography are adapted.
+Original Classic/Plus/cooperative/head-to-head variants, full source options and
+the complete EEPROM image/write protocol remain outside this implementation.
 See the [current behavior audit](docs/BEHAVIOR_AUDIT.md) for precise limits.

@@ -7,7 +7,7 @@ constexpr float tau = 6.283185307f;
 void Game::tickRotaryBonus(float dt) {
     // m7run/iii: rotary deltas accumulate momentum, then position advances every
     // source frame. The A/C buttons use iycon's acceleration, friction and cap.
-    // Meter-space vertical bounds retain room for the imported gate courses.
+    // iycon bounds +/-$1400000, projected with >>3 and 32 units per meter.
     bonusControlClock += dt;
     while (bonusControlClock + 1e-9 >= 1.0 / 60) {
         bonusControlClock -= 1.0 / 60;
@@ -29,10 +29,44 @@ void Game::tickRotaryBonus(float dt) {
             bonusVerticalVelocity = 0;
         else
             bonusVerticalVelocity -= std::copysign(friction, bonusVerticalVelocity);
-        bonusY = std::clamp(bonusY + bonusVerticalVelocity / 60, -4.5f, 4.5f);
-        if ((bonusY >= 4.5f && bonusVerticalVelocity > 0) ||
-            (bonusY <= -4.5f && bonusVerticalVelocity < 0))
+        // inertcon checks the previous position; it permits one-step overshoot.
+        float limit = bonusVerticalLimit();
+        if ((bonusUp && bonusY > limit) || (!bonusUp && bonusDown && bonusY <= -limit))
             bonusVerticalVelocity = 0;
+        else
+            bonusY += bonusVerticalVelocity / 60;
+        // The preserved rotary path falls through to the second pad's inertcon.
+        if (secondaryConnected) {
+            auto inert = [](float &position, float &velocity, unsigned buttons, float accel,
+                            float friction, float cap, float low, float high) {
+                if (buttons & 1) {
+                    if (position < low) {
+                        velocity = 0;
+                        return;
+                    }
+                    if (velocity >= -cap)
+                        velocity -= accel;
+                } else if (buttons & 2) {
+                    if (position >= high) {
+                        velocity = 0;
+                        return;
+                    }
+                    if (velocity < cap)
+                        velocity += accel;
+                } else if (std::abs(velocity) < friction) {
+                    velocity = 0;
+                    return;
+                } else
+                    velocity -= std::copysign(friction, velocity);
+                position += velocity / 60;
+            };
+            inert(bonusX, padHorizontalVelocity, secondaryHorizontal, 60.f / 512, 60.f / 1024,
+                  60.f / 16, -5, 5);
+            unsigned vertical =
+                ((secondaryVertical & 1) ? 2 : 0) | ((secondaryVertical & 2) ? 1 : 0);
+            inert(bonusY, bonusVerticalVelocity, vertical, .5f * 60 / 256, .125f * 60 / 256,
+                  bonusVerticalMax, -limit, limit);
+        }
     }
 }
 void Game::startTunnel() {

@@ -4,71 +4,85 @@ Reference: [mwenge/tempest2k, revision 8b50b467](https://github.com/mwenge/tempe
 
 **This is a recreation with imported data, not a complete behavioral port.** Passing the campaign tests establishes that the imported schedules and implemented rules work together; it does not establish that every original enemy state, collision or effect matches. Earlier documentation describing the roster as implemented should be read with the qualifications below.
 
-## Current gap-fill status (2026-10-27)
+## Current implementation status (2026-10-27)
 
-This section supersedes the historical findings below. The eight reproduced
-post-8a47fb9 cases now have dedicated regressions in `tests/gap-test.cpp`.
+This section supersedes historical findings below, including the earlier
+120 Hz collision, eleven-frame splatter, fixed-profile and free-stage claims.
+The requested items 1–6 and 8 now have implementations and regression coverage:
 
-- Beast hits use the pre-movement climbing state, including rim entry; hostile
-  droid shield hits cancel the transition to above-rim patrol. Reflections keep
-  the firing owner's bullet entitlement.
-- Both token and button zaps use one four-source-frame selection path. Immunity
-  follows the collision handler, including climbing beasts, mirrors/reflections,
-  climbing hostile droids, fuseballs outside their central crossing window and
-  invulnerable flipper turns. The previous audit incorrectly treated climbing
-  beasts and rail-bound fuseballs as ordinary zap targets.
-- Generation uses integer half-periods and signed-negative expiry, with wave-one
-  dispatch at 120 Hz ticks 122/364/606/848. Generated enemies (except spikers)
-  enter as distant pixels for 150 source updates; pulsars wait for phase <3.
-- Player and friendly droid each have eight bullet slots. Reflections and the
-  eleven-frame `xshot` splatter retain the original owner's slot. The droid uses
-  sixteen-step pursuit, halfway collision-lane changes and six-frame firing,
-  including firing/patrolling when no target is present.
-- Allocation tracks the 32 alien/effect allowance, 21-slot generation reserve,
-  three-slot tanker reservations, spikes reducing both `afree` and `noclog`,
-  explosion/pickup occupancy and a 64-object physical limit. C++ collections and
-  GPU particles replace the Jaguar linked lists; list insertion/sub-frame
-  collision ordering remain adaptations.
-- Open-web fuseballs preserve their arrived outer rail independently of their
-  collision lane. Tunnel phase contact is checked against a literal reference
-  for every one of the 65,536 track/player byte combinations.
-- Retained enemies/projectiles animate safely through clearance. The warning is
-  limited to displayed webs 4–16, suppressed for early exits, and uses the source
-  250-frame first message phase. The duplicate particle `WEB CLEAR` was removed.
-  Menu, Pause, Game Over and victory title cards, plus the score/help HUD strips,
-  now have transparent backgrounds.
-- The invented clearance award is gone. Selected-web starts use `slebon`'s
-  `(level-1)*(2600+200*(level-1))` reward. Ordinary point pickups include the rare
-  nine-byte-value `suprise` branch: 3,000 points, infinite-zap pass and early exit.
-  One Up cycles the web for 50 frames while its graphic lasts 151 signed-counter
-  frames; tunnel extra lives suppress that holiday and graphic.
-- Effects now have separate fixed-60-Hz ring, sphere, bullet-splatter, collected
-  pickup and score-expansion lifecycles. The original `fw_test` command bytes
-  drive fireworks, including waits, nested loops, launch vectors, gravity and
-  flight-to-sphere expiry. Successful ring/psycho bonuses hold the pyramid/echo
-  presentation for the source's 401-frame interval. Geometry, RGB colors and
-  meter scales remain native XR renderings of those effect families.
-- Music retains and fades the outgoing module for `domod`'s 51-frame delay,
-  then starts the queued module; pause freezes both. Random-bonus destruction
-  uses original sample 8. All voices remain original samples only.
-- After displayed web 99's clearance flight, the source `cwave>=99` handoff
-  unlocks Beastly replay: doubled scores, half-speed player shots, slower player
-  firing, eight alien bullets and no ordinary flipper rest. All 100 imported
-  schedules remain accessible to diagnostic fixtures.
-- The original ten default scores and four access-key names are present.
-  Wheel/keyboard initials entry, per-key progress/Beastly unlock and the score
-  table persist atomically in `records.json`; legacy settings stay readable.
-  The desktop title rotates scores, instructions and original credits. Menu K
-  changes access key, and O toggles unlocked Beastly play.
+1. **Combat timing/order.** Combat uses a fixed 60 Hz source clock, newest-first
+   actor serials and round-robin bullet-table slots. `sclawr` decrements only
+   while fire is held; newborn player shots wait until the next actor update.
+   Global `frames & 3` controls paced zaps and retains phase across new games.
+   `run_flipper` and `run_fuseball` zap checks precede normal shot windows:
+   turning flippers, climbing beasts and rail-bound fuseballs are zappable.
+   Spark contact still precedes its zap/collision call; tankers open children.
+   This corrects the earlier audit's erroneous immunity claims.
+   Entry activates its handler on its
+   150th update. Integer Z differences are strictly less than six, stopped and
+   climbing collisions precede movement, turns use the post-rotation window,
+   and exact landing returns before collision. Shot takeover preserves list
+   position and bullet position. The source `xshot` sequence lasts eight updates,
+   retaining ownership while releasing its live bullet-table slot.
+2. **Repeated bonus timing.** The `$100000` generator countdown persists between
+   courses. Its 16.16 subtraction, twelve-unit refill, packed delays, integer
+   gate Z threshold and one-eighth boost rounding are translated. Fresh first
+   arrival is 269 units for rings and 268.75 for psycho; later courses inherit
+   the generator phase. All 24 courses complete through public controls.
+3. **Messages.** Signed-negative hold/tail counters, 100/50 defaults (101/51
+   updates), 250-frame clearance hold, tail scaling and triangle-wave shear are
+   translated. The warning is restricted to displayed webs 4–16 and omitted for
+   early exits. All title/HUD backgrounds remain transparent.
+4. **Effects.** Sphere density/phase tables, source sine bytes, hardware CRY
+   palette/intensity, score pixel expansion and framebuffer transforms are used.
+   Melt follows 150 source frames with 500/512 scale and −8 intensity; pyramid
+   feedback uses 494/512 and source motion. Each eye has independent history.
+   Existing mesh breakup, rings, trails, fireworks interpreter and 401-frame
+   bonus victory remain implemented. This is native OpenGL rendering: RGB-to-CRY
+   LUT quantization, translucent feedback and XR projection are adaptations.
+   Current HUD/instructions draw after feedback to preserve readability; these
+   overlays do not accumulate in the history. The result is
+   not a bit-exact Jaguar GPU/blitter implementation.
+5. **Contextual audio.** Spike shortening uses sample 13 and length-dependent
+   pitch; pickup creation has its distinct sample-9 context. Clearance engine
+   pitch, opposed volume modulation and arrival whoosh pitch changes use source
+   frames. Original sample pairs, priorities, music selection and 51-frame fade
+   remain. Speech uses samples only. Native mixing/channel scheduling does not
+   emulate the Imagitec DSP instruction stream.
+6. **Frontend.** Title, scores, credits, instruction pages and a real silent
+   attract game cycle; Game Over waits for fire before initials. Normal/Beastly
+   congratulations feed the original 32-position initials carousel, DEL/END,
+   source tie handling and five-character number-one brag. Typography and some
+   page choreography are native desktop/XR adaptations.
+8. **Rotary input.** Physical mouse samples use source `$2000`–`$5000` adaptive
+   calibration, `$1000` increments and `$200` idle decay. The primary inertial
+   A/C controller retains previous-position bounds and possible overshoot;
+   a connected second gamepad enables the preserved extra inertial pad pass.
+   Per user choice, playable vertical limits cover the course. The diagnostic
+   `--strict-source-rotary` flag uses the literal ±1.25 source limit; imported
+   gates at Y=2 or beyond are unreachable under that preserved limit.
 
-Remaining scope: the original Classic/Plus/cooperative/head-to-head variants,
-full original option/attract choreography and physical EEPROM encoding are not
-ported. Native access-key storage replaces the EEPROM representation. Jaguar
-GPU/blitter rasterization, CRY feedback/melt arithmetic, message shears and some
-bitmap breakup/color details remain approximations. Mouse calibration, rotary
-secondary-pad fall-through and XR projection retain the adaptations documented
-in SOURCE_NOTES. Physical-headset validation remains outstanding. This is not a
-claim of instruction-for-instruction behavior or pixel-identical presentation.
+**Original key saving replaces stage selection.** New games start at web 1.
+Four signature/checkpoint keys are earned only after progressing beyond web 17;
+resume levels follow `((min(reached,99)-2)&~1)+1`. Selected keys reuse their
+signature, including the source's checkpoint rewrite at game end. New signatures
+use a matching, empty or weakest slot. Version-2 JSON stores the original
+16 key bytes (three lowercase initials plus zero-based even checkpoint); zero
+means inactive. Version-1 progress migrates. Beastly unlock is global, not a
+per-key profile. `--level` is diagnostic only. Full EEPROM image encoding and
+hardware write timing remain outside scope.
+
+The earlier gap fixes remain: 32/21/64 allocation/backpressure and tanker/spike
+reservations, independent player/droid ownership, six-frame friendly-droid fire
+and sixteen-step pursuit, open-web endpoint geometry, every tunnel phase pair,
+retained clearance animation/pickups, rare exits, original scoring/life awards,
+web-99 ending and Beastly rules. All 100 source schedules are imported, with the
+100th alias retained for diagnostics.
+
+Remaining differences include full source options, Classic/Plus/co-op/H2H,
+physical EEPROM protocol, exact original frontend choreography and integer GPU/
+DSP output. Physical headset/WiVRn tracking, performance and comfort still need
+hardware validation. Passing tests is not proof of complete behavioral identity.
 
 ## Historical audit and implementation notes
 

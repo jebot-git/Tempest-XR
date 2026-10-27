@@ -12,6 +12,7 @@ constexpr float dt = 1.f / 120;
 static Game setup(int level = 1) {
     Game g(42);
     g.start(level);
+    g.tick(1.f / 120);
     g.fireHeld = false;
     g.invulnerable = 100;
     return g;
@@ -106,6 +107,8 @@ int main() {
             g.enemies = {e};
             g.fireHeld = true;
             g.tick(dt);
+            for (int i = 0; i < 9; ++i)
+                g.tick(dt);
             CHECK(g.lives == 3 && g.score == 150 && count(g, Kind::PulsarSpark) == 0);
         }
         {
@@ -114,7 +117,7 @@ int main() {
             Enemy e{Kind::PulsarSpark, at, 0};
             e.rim = true;
             g.enemies = {e};
-            for (int i = 0; i < 9; ++i)
+            for (int i = 0; i < 8; ++i)
                 g.tick(dt);
             CHECK(g.enemies[0].lane == at);
             g.tick(dt);
@@ -127,7 +130,7 @@ int main() {
             g.tick(dt);
             CHECK(count(g, family) == 1 && g.score == 0);
             g.enemies[0].depth = .00001f;
-            g.tick(dt);
+            g.tick(1.f / 60);
             CHECK(count(g, family) == 0 && g.enemies.size() == 3 && g.score == 100);
             CHECK(std::find(g.sounds.begin(), g.sounds.end(), Sound::TankerOpen) != g.sounds.end());
             int contents = 0;

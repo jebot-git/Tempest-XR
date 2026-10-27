@@ -65,14 +65,16 @@ static void stereo(Renderer &renderer, const Game &game, int width, int height) 
         glMatrixMode(GL_MODELVIEW);
         glLoadIdentity();
         glTranslatef(eye == 0 ? .032f : -.032f, 0, -.55f);
-        renderer.world(game, true);
+        renderer.world(game, true, false);
         renderer.finishFrame(game, eye + 2, eye * half, 0, half, height);
+        renderer.headsetHud(game);
     }
 }
 int main(int argc, char **argv) {
     bool wantXR = false, sbs = false, demo = false, smoke = false, noAudio = false, noMusic = false,
          warpDemo = false, effectsDemo = false, enemyDemo = false, explicitLevel = false;
     int bonusDemo = -1, deathDemo = -1;
+    bool strictRotaryLimits = false;
     int frameLimit = 0, startingLevel = 1;
     float musicVolume = -1, sfxVolume = -1, voiceVolume = -1;
     std::string capture, musicDirectory, launchMode = "auto", reportPath;
@@ -94,6 +96,8 @@ int main(int argc, char **argv) {
                 sbs = true;
             else if (arg == "--report")
                 reportPath = value();
+            else if (arg == "--strict-source-rotary")
+                strictRotaryLimits = true;
             else if (arg == "--demo")
                 demo = true;
             else if (arg == "--warp-demo")
@@ -144,7 +148,8 @@ int main(int argc, char **argv) {
                        "track preview | Ctrl+Q: quit\n"
                        "Bonus: wheel/Left/Right steer, hold LMB/Up/W up, RMB/Down/S down\n"
                        "F2/F3: music volume | F4/F5: effects | F6/F7: recorded voices\n"
-                       "--music-volume, --sfx-volume, --voice-volume: 0..100\n";
+                       "--music-volume, --sfx-volume, --voice-volume: 0..100\n"
+                       "--strict-source-rotary: literal bonus limits (some gates unreachable)\n";
                 return 0;
             } else
                 throw std::runtime_error("Unknown argument: " + arg);
@@ -160,7 +165,8 @@ int main(int argc, char **argv) {
         SDL_SetHint("SDL_APP_ID", "org.de_xr.TempestXR");
         SDL_SetHint("SDL_VIDEO_WAYLAND_WMCLASS", "org.de_xr.TempestXR");
         SDL_SetHint("SDL_VIDEO_X11_WMCLASS", "org.de_xr.TempestXR");
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_TIMER) != 0)
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS | SDL_INIT_AUDIO | SDL_INIT_TIMER |
+                     SDL_INIT_GAMECONTROLLER) != 0)
             throw std::runtime_error(SDL_GetError());
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -208,16 +214,14 @@ int main(int argc, char **argv) {
         if (voiceVolume >= 0)
             settings.voiceVolume = voiceVolume;
         Game game;
+        game.strictRotaryLimits = strictRotaryLimits;
         game.best = std::max(settings.best, game.highScores.front().score);
         game.unlockedLevel = settings.unlockedLevel;
-        game.selectedLevel = explicitLevel ? startingLevel : settings.unlockedLevel;
-        game.accessKeys[0].unlocked = settings.unlockedLevel;
+        game.selectedLevel = 1;
         const auto recordsPath =
             (std::filesystem::path(path).parent_path() / "records.json").string();
         if (!frameLimit)
             loadRecords(recordsPath, game);
-        if (explicitLevel)
-            game.selectedLevel = startingLevel;
         Renderer renderer;
         std::unique_ptr<Audio> audio;
         if (!noAudio) {
@@ -358,6 +362,18 @@ int main(int argc, char **argv) {
             savedUnlocked = game.unlockedLevel;
             savedRecords = game.recordsVersion;
         };
+        std::unique_ptr<SDL_GameController, decltype(&SDL_GameControllerClose)> secondary(
+            nullptr, SDL_GameControllerClose);
+        auto connectSecondary = [&]() {
+            secondary.reset();
+            int pads = 0;
+            for (int i = 0; i < SDL_NumJoysticks(); ++i)
+                if (SDL_IsGameController(i) && ++pads == 2) {
+                    secondary.reset(SDL_GameControllerOpen(i));
+                    break;
+                }
+        };
+        connectSecondary();
         int frame = 0, smokeBefore = -1, smokeAfter = -1;
         float keyboardTimer = 0;
         uint64_t previous = SDL_GetPerformanceCounter();
@@ -394,6 +410,9 @@ int main(int argc, char **argv) {
                     if (dome.focused())
                         enterXR();
                 }
+                if (event.type == SDL_CONTROLLERDEVICEADDED ||
+                    event.type == SDL_CONTROLLERDEVICEREMOVED)
+                    connectSecondary();
                 if (event.type == SDL_MOUSEWHEEL) {
                     ++wheelEvents;
                     float delta = event.wheel.preciseY;
@@ -401,7 +420,7 @@ int main(int argc, char **argv) {
                         delta = float(event.wheel.y);
                     if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED)
                         delta = -delta;
-                    game.steer(delta * settings.sensitivity * (settings.inverted ? -1.f : 1.f));
+                    game.rotary(delta * settings.sensitivity * (settings.inverted ? -1.f : 1.f));
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     if (event.button.button == SDL_BUTTON_LEFT) {
@@ -416,18 +435,9 @@ int main(int argc, char **argv) {
                             continue;
                         }
                         game.fireHeld = true;
-                        if (((xr || sbs) && game.mode == Mode::Menu) ||
-                            game.mode == Mode::GameOver || game.mode == Mode::Victory)
-                            game.start(game.mode == Mode::Victory ? 1
-                                       : explicitLevel            ? startingLevel
-                                                                  : game.selectedLevel,
-                                       true);
-                        int w, h;
-                        SDL_GetWindowSize(window.get(), &w, &h);
-                        float x = float(event.button.x) * 1440 / w,
-                              y = float(event.button.y) * 900 / h;
-                        if (game.mode == Mode::Menu && x >= 70 && x <= 480 && y >= 662 && y <= 724)
-                            game.start(explicitLevel ? startingLevel : game.selectedLevel, true);
+                        if (game.mode == Mode::Menu || game.mode == Mode::GameOver ||
+                            game.mode == Mode::Victory)
+                            game.activate();
                     }
                     if (event.button.button == SDL_BUTTON_RIGHT) {
                         if (game.enteringScore) {
@@ -454,9 +464,12 @@ int main(int argc, char **argv) {
                 if (event.type == SDL_KEYDOWN && !event.key.repeat) {
                     auto key = event.key.keysym.sym;
                     if (game.enteringScore && !(event.key.keysym.mod & (KMOD_CTRL | KMOD_ALT))) {
-                        if (key == SDLK_RETURN || key == SDLK_ESCAPE)
+                        if (key == SDLK_RETURN)
                             game.finishScoreEntry();
-                        else if (key == SDLK_BACKSPACE || key == SDLK_LEFT)
+                        else if (key == SDLK_ESCAPE) {
+                            game.enteringScore = false;
+                            game.returnToTitle();
+                        } else if (key == SDLK_BACKSPACE || key == SDLK_LEFT)
                             game.scoreCursor = std::max(0, game.scoreCursor - 1);
                         else if (key == SDLK_RIGHT)
                             game.nextScoreLetter();
@@ -466,8 +479,15 @@ int main(int argc, char **argv) {
                             game.steer(-1);
                         else if (key >= SDLK_a && key <= SDLK_z)
                             game.setScoreLetter(char('A' + key - SDLK_a));
-                        else if (key >= SDLK_0 && key <= SDLK_9)
-                            game.setScoreLetter(char('0' + key - SDLK_0));
+                        else if (key == SDLK_SPACE)
+                            game.setScoreLetter(' ');
+                        else if (key == SDLK_PERIOD)
+                            game.setScoreLetter('.');
+                        else if (key == SDLK_MINUS)
+                            game.setScoreLetter('-');
+                        else if (key == SDLK_EXCLAIM ||
+                                 (key == SDLK_1 && (event.key.keysym.mod & KMOD_SHIFT)))
+                            game.setScoreLetter('!');
                         continue;
                     }
                     if (key == SDLK_k && game.mode == Mode::Menu)
@@ -485,15 +505,15 @@ int main(int argc, char **argv) {
                     if (key == SDLK_RETURN &&
                         (game.mode == Mode::Menu || game.mode == Mode::GameOver ||
                          game.mode == Mode::Victory))
-                        game.start(game.mode == Mode::Victory ? 1
-                                   : explicitLevel            ? startingLevel
-                                                              : game.selectedLevel,
-                                   true);
+                        game.activate();
                     if (key == SDLK_ESCAPE) {
-                        if (game.mode == Mode::Menu)
-                            quit = true;
-                        else if (game.mode == Mode::GameOver || game.mode == Mode::Victory)
-                            game.mode = Mode::Menu;
+                        if (game.mode == Mode::Menu) {
+                            if (game.frontPage == FrontPage::Keys)
+                                game.returnToTitle();
+                            else
+                                quit = true;
+                        } else if (game.mode == Mode::GameOver || game.mode == Mode::Victory)
+                            game.returnToTitle();
                         else
                             game.pause();
                     }
@@ -541,6 +561,18 @@ int main(int argc, char **argv) {
             }
             if (smoke && frame == 20)
                 smokeAfter = game.lane;
+            if (secondary && !SDL_GameControllerGetAttached(secondary.get()))
+                connectSecondary();
+            if (secondary) {
+                auto down = [&](SDL_GameControllerButton b) {
+                    return SDL_GameControllerGetButton(secondary.get(), b) != 0;
+                };
+                game.secondaryPad((down(SDL_CONTROLLER_BUTTON_DPAD_LEFT) ? 1u : 0u) |
+                                      (down(SDL_CONTROLLER_BUTTON_DPAD_RIGHT) ? 2u : 0u),
+                                  (down(SDL_CONTROLLER_BUTTON_DPAD_UP) ? 1u : 0u) |
+                                      (down(SDL_CONTROLLER_BUTTON_DPAD_DOWN) ? 2u : 0u));
+            } else
+                game.secondaryPad(0, 0, false);
             auto keys = SDL_GetKeyboardState(nullptr);
             if (game.isBonus() && game.mode != Mode::Paused) {
                 auto buttons = SDL_GetMouseState(nullptr, nullptr);
@@ -653,9 +685,9 @@ int main(int argc, char **argv) {
                             std::to_string(int(settings.sfxVolume * 100 + .5f)) + " / F6-7 VOICE " +
                             std::to_string(int(settings.voiceVolume * 100 + .5f));
                     }
+                    renderer.finishFrame(game, 4, 0, 0, width, height);
                     renderer.hud(game, width, height, audioStatus, settings.sensitivity,
                                  settings.inverted, settings.muted);
-                    renderer.finishFrame(game, 4, 0, 0, width, height);
                 }
                 if (frameLimit && frame + 1 >= frameLimit && !capture.empty())
                     saveCapture(capture, width, height);
@@ -672,7 +704,7 @@ int main(int argc, char **argv) {
             throw std::runtime_error("Rendering validation failed: OpenGL error " +
                                      std::to_string(error));
         if (smoke) {
-            bool wheel = smokeAfter == game.boundedLane(smokeBefore + 2);
+            bool wheel = smokeAfter == game.boundedLane(smokeBefore + 3);
             std::cout << "{\"frames\":" << frame << ",\"wheel_before\":" << smokeBefore
                       << ",\"wheel_after\":" << smokeAfter
                       << ",\"wheel_ok\":" << (wheel ? "true" : "false")
@@ -680,7 +712,6 @@ int main(int argc, char **argv) {
             if (!wheel || error != GL_NO_ERROR)
                 throw std::runtime_error("Smoke validation failed");
         }
-        game.finishScoreEntry();
         saveSettings();
         if (!reportPath.empty())
             std::ofstream(reportPath)
@@ -708,6 +739,7 @@ int main(int argc, char **argv) {
         renderer.releaseGL();
         SDL_GL_DeleteContext(context);
         window.reset();
+        secondary.reset();
         SDL_Quit();
         return 0;
     } catch (const std::exception &e) {

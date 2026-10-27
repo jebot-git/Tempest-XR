@@ -11,6 +11,7 @@ static constexpr float dt = 1.f / 120;
 static Game setup(int level = 1) {
     Game g(42);
     g.start(level);
+    g.tick(1.f / 120);
     g.invulnerable = 1000;
     return g;
 }
@@ -43,7 +44,9 @@ int main() {
             CHECK(!g.enemies[0].rim && g.enemies[0].depth > 0);
         }
         {
-            auto g = setup();
+            Game g;
+            g.start();
+            g.invulnerable = 1000;
             std::vector<int> dispatched;
             for (int tick = 1; tick <= 850; ++tick) {
                 int before = g.enemiesRemaining;
@@ -75,7 +78,7 @@ int main() {
             steps(g, 298);
             CHECK(g.enemies[0].entering);
             steps(g, 2);
-            CHECK(!g.enemies[0].entering && g.enemies[0].depth == 1);
+            CHECK(!g.enemies[0].entering && g.enemies[0].depth < 1);
         }
         for (bool token : {false, true}) {
             auto g = setup();
@@ -97,7 +100,8 @@ int main() {
             steps(g, 8);
             CHECK(count(g, Kind::Flipper) == 0);
             CHECK(count(g, Kind::Mirror) == 1 && count(g, Kind::MirrorShot) == 1);
-            CHECK(count(g, Kind::Adroid) == 1 && count(g, Kind::Beast) == 1);
+            steps(g, 8);
+            CHECK(count(g, Kind::Adroid) == 1 && count(g, Kind::Beast) == 0);
         }
         {
             auto g = setup();
@@ -179,19 +183,19 @@ int main() {
                 CHECK(g.mode == Mode::Victory && g.beastlyUnlocked);
             }
         }
-        // A consumed bullet retains its owner's entitlement through xshot's 11 frames.
+        // A consumed bullet retains its owner's entitlement through xshot's eight updates.
         {
             auto g = setup();
             g.spawn(Kind::Flipper, 3, .5f);
             g.shots = {{3, .49f, .49f}};
             steps(g, 1);
             CHECK(g.shots.empty() && g.shotSlots(false) == 1 && g.shotSlots(true) == 0);
-            steps(g, 20);
+            steps(g, 14);
             CHECK(g.shotSlots(false) == 1);
-            steps(g, 1);
+            steps(g, 2);
             CHECK(g.shotSlots(false) == 0);
         }
-        // Fuseball rail motion never invokes collie; only the middle of a crossing does.
+        // run_fuseball checks _sz before its rail/crossing dispatch.
         for (bool crossing : {false, true}) {
             auto g = setup();
             g.spawn(Kind::Fuseball, 3, .5f);
@@ -199,7 +203,7 @@ int main() {
             g.enemies[0].crossSteps = 8;
             g.zap();
             steps(g, 8);
-            CHECK(count(g, Kind::Fuseball) == (crossing ? 0 : 1));
+            CHECK(count(g, Kind::Fuseball) == 0);
         }
         {
             auto g = setup(17);
@@ -268,7 +272,7 @@ int main() {
             g.start();
             g.powerupStage = 1;
             g.spawn(Kind::Powerup, g.lane, 0);
-            steps(g, 1);
+            steps(g, 2);
             if (g.earlyExit) {
                 CHECK(g.score == 3000 && g.mode == Mode::Transition && g.message == "OUTTAH HERE!");
                 rare = true;

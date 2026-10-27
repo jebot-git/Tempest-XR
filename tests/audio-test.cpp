@@ -77,6 +77,13 @@ struct AudioProbe {
         audio.play(Sound::AlienBonus);
         CHECK(audio.voices[0].sample == 8 && audio.voices[0].priority == 3);
         audio.voices = {};
+        audio.play(SoundCue{Sound::Spike, 700});
+        CHECK(audio.voices[0].sample == 13 && audio.voices[0].priority == 2);
+        CHECK(audio.voices[0].pitchWord == 700);
+        audio.voices = {};
+        audio.play(Sound::PowerupSpawn);
+        CHECK(audio.voices[0].sample == 9 && audio.voices[0].priority == 3);
+        audio.voices = {};
         audio.play(Sound::OneUp);
         CHECK(audio.voices[0].remaining > 0 && audio.voices[1].remaining == 0);
         audio.voices = {};

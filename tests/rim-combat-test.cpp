@@ -9,7 +9,7 @@ using namespace tempest;
             throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) +      \
                                      " " #c);                                                      \
     } while (false)
-constexpr float dt = 1.f / 120;
+constexpr float dt = 1.f / 60;
 static Game setup(int level = 1) {
     Game g(42);
     g.start(level);
@@ -41,7 +41,8 @@ int main() {
         for (bool fire : {false, true}) {
             auto g = setup();
             g.enemies = {rim(g)};
-            g.fireHeld = fire;
+            if (fire)
+                g.shots = {{g.lane}};
             g.tick(dt);
             CHECK(g.lives == (fire ? 3 : 2));
             CHECK(g.score == (fire ? 150 : 0));
@@ -74,7 +75,7 @@ int main() {
             g.fireHeld = false;
             CHECK(g.score == 0 && g.lives == 3 && count(g, Kind::Flipper) == 1);
             auto after = g.enemyPosition(g.enemies[0]);
-            CHECK(std::hypot(after.x - before.x, after.y - before.y) < .06f);
+            CHECK(std::hypot(after.x - before.x, after.y - before.y) < .13f);
             // That shot leaves the rim long before vulnerability opens.
             for (int i = 0; i < 100 && g.deathTime == 0; ++i)
                 g.tick(dt);
@@ -83,7 +84,7 @@ int main() {
         for (int weapon = 0; weapon < 3; ++weapon) {
             auto g = turning();
             g.boost = weapon == 1;
-            while (g.enemies[0].turnArc - g.enemies[0].turnAngle > 54)
+            while (g.enemies[0].turnArc - g.enemies[0].turnAngle > 56)
                 g.tick(dt);
             CHECK(!Game::shotVulnerable(g.enemies[0]));
             if (weapon == 2) {
@@ -91,7 +92,7 @@ int main() {
                 shot.ally = true;
                 g.shots = {shot};
             } else
-                g.fireHeld = true;
+                g.shots = {{g.lane}};
             // Remaining angle reaches exactly 52 during this tick. A live shot wins.
             g.tick(dt);
             CHECK(g.lives == 3 && g.deathTime == 0 && g.score == 150);
@@ -169,7 +170,7 @@ int main() {
         {
             auto g = turning(1, Kind::SuperFlipper);
             g.tick(dt);
-            CHECK(g.enemies[0].turnAngle == 4); // mode 2 rotates at twice normal speed.
+            CHECK(g.enemies[0].turnAngle == 8); // mode 2 rotates at twice normal speed.
         }
         // A concave web can start inside the wrapped vulnerability window,
         // become invulnerable midway through a long turn, then open again.
@@ -179,7 +180,7 @@ int main() {
             g.enemies = {rim(g, -1)};
             g.tick(dt);
             CHECK(g.enemies[0].turnArc == 224 && Game::shotVulnerable(g.enemies[0]));
-            g.fireHeld = true;
+            g.shots = {{g.lane}};
             g.tick(dt);
             CHECK(g.score == 150 && g.lives == 3);
         }
@@ -198,7 +199,7 @@ int main() {
             while (!Game::shotVulnerable(g.enemies[0]))
                 g.tick(dt);
             CHECK(g.score == 0);
-            g.fireHeld = true;
+            g.shots = {{g.lane}};
             g.tick(dt);
             CHECK(g.score == 150 && g.lives == 3);
         }
@@ -240,7 +241,10 @@ int main() {
                 auto g = setup();
                 g.boost = weapon == 1;
                 Enemy behind{Kind::Flipper, g.lane, .04f};
-                g.enemies = {behind, rim(g)};
+                behind.serial = 10;
+                auto rimEnemy = rim(g);
+                rimEnemy.serial = 20;
+                g.enemies = {behind, rimEnemy};
                 if (reverse)
                     std::reverse(g.enemies.begin(), g.enemies.end());
                 if (weapon == 2) {
@@ -248,7 +252,8 @@ int main() {
                     shot.ally = true;
                     g.shots = {shot};
                 } else
-                    g.fireHeld = true;
+                    g.shots = {{g.lane}};
+                g.shots[0].serial = 30;
                 g.tick(dt);
                 CHECK(g.lives == 3 && g.deathTime == 0);
                 CHECK(g.score == (weapon == 1 ? 300 : 150));

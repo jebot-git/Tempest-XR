@@ -42,7 +42,8 @@ int main() {
         };
         status.unlockedLevel = 17;
         status.selectedLevel = 12;
-        expectHud("START WEB 12 / UNLOCKED 17");
+        expectHud("START AT WEB 1");
+        expectHud("UNLOCKED", false);
         status.start();
         status.zaps = 1;
         status.bonusTokens = 2;
@@ -69,8 +70,9 @@ int main() {
         expectHud("OFF TRACK SHRINKS IT");
         expectHud("MISSING ONE", false);
         status.mode = Mode::Victory;
-        expectHud("CAMPAIGN COMPLETE");
-        expectHud("PLAY AGAIN");
+        status.frontPage = FrontPage::Congratulations;
+        expectHud("YOU BEAT THE GAME!");
+        expectHud("FIRE TO CONTINUE");
         expectHud("AVOID SPIKES", false);
         std::vector<unsigned char> pixels(512 * 512 * 3);
         auto render = [&](float yaw, float pitch) {
@@ -84,8 +86,9 @@ int main() {
             glLoadIdentity();
             glRotatef(pitch, 1, 0, 0);
             glRotatef(yaw, 0, 1, 0);
-            renderer.world(game, true);
+            renderer.world(game, true, false);
             renderer.finishFrame(game, 0, 0, 0, 512, 512);
+            renderer.headsetHud(game);
             glReadPixels(0, 0, 512, 512, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
             if (glGetError() != GL_NO_ERROR)
                 throw std::runtime_error("OpenGL error in XR renderer");

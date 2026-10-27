@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 using namespace tempest;
 #define CHECK(c)                                                                                   \
@@ -10,57 +11,88 @@ using namespace tempest;
         if (!(c))                                                                                  \
             throw std::runtime_error(std::to_string(__LINE__) + ": " #c);                          \
     } while (false)
+static void endRun(Game &g, int level, int score, const std::string &name) {
+    g.accessKey = -1;
+    g.start(level);
+    g.score = score;
+    g.mode = Mode::GameOver;
+    g.frontPage = FrontPage::GameOver;
+    g.tick(.2f);
+    g.activate();
+    CHECK(g.enteringScore);
+    for (char ch : name)
+        g.setScoreLetter(ch);
+    if (g.enteringBrag)
+        for (char ch : std::string("BEAST"))
+            g.setScoreLetter(ch);
+    CHECK(!g.enteringScore && g.frontPage == FrontPage::Scores);
+}
 int main() {
-    auto directory = std::filesystem::temp_directory_path() /
-                     ("tempest-records-test-" +
-                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    std::filesystem::create_directory(directory);
-    auto path = (directory / "records.json").string();
+    auto dir = std::filesystem::temp_directory_path() /
+               ("tempest-keys-" +
+                std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::filesystem::create_directory(dir);
+    auto path = (dir / "records.json").string();
     try {
         Game g;
-        CHECK(g.highScores[0].score == 500017 && g.highScores[9].initials == "FUR");
-        g.start(99);
-        g.score = 600000;
-        g.enemiesRemaining = 0;
-        for (int i = 0; i < 300; ++i)
-            g.tick(1.f / 120);
-        CHECK(g.mode == Mode::Victory && g.enteringScore && g.beastlyUnlocked);
-        g.steer(.4f);
-        CHECK(g.scoreInitials == "AAA");
-        g.steer(.6f);
-        CHECK(g.scoreInitials == "BAA");
-        g.steer(1);
-        CHECK(g.scoreInitials == "CAA");
-        g.setScoreLetter('X');
-        g.setScoreLetter('R');
-        g.setScoreLetter('2');
-        g.finishScoreEntry();
-        CHECK(g.highScores[0].initials == "XR2" && g.highScores[0].score == 600000);
-        CHECK(g.highScores[1].score == 500017 && !g.enteringScore);
-        g.mode = Mode::Menu;
+        CHECK(g.highScores[0].score == 500017);
+        CHECK(std::all_of(g.accessKeys.begin(), g.accessKeys.end(),
+                          [](const auto &k) { return !k.unlocked; }));
+        endRun(g, 18, 100, "YAK");
+        CHECK(g.accessKeys[0].initials == "YAK" && g.accessKeys[0].unlocked == 17);
+        endRun(g, 20, 200, "YAK");
+        CHECK(g.accessKeys[0].unlocked == 19 && !g.accessKeys[1].unlocked);
+        endRun(g, 22, 300, "EWE");
+        endRun(g, 24, 400, "COW");
+        endRun(g, 26, 500, "GNU");
+        CHECK(g.accessKeys[3].unlocked == 25);
+        endRun(g, 28, 600, "OX ");
+        CHECK(g.accessKeys[0].initials == "OX " && g.accessKeys[0].unlocked == 27);
+        g.returnToTitle();
         g.selectAccessKey();
-        CHECK(g.accessKey == 1 && g.unlockedLevel == 1 && !g.beastlyUnlocked);
-        g.unlockedLevel = 17;
-        g.selectAccessKey();
-        g.selectAccessKey();
-        g.selectAccessKey();
-        CHECK(g.accessKey == 0 && g.unlockedLevel == 99 && g.beastlyUnlocked);
+        g.steer(2);
+        g.activate();
+        CHECK(g.accessKey == 2 && g.level == 23 && g.score > 0);
+        g.mode = Mode::GameOver;
+        g.frontPage = FrontPage::GameOver;
+        g.tick(.2f);
+        g.activate();
+        CHECK(!g.enteringScore);
+        CHECK(g.accessKeys[2].initials == "COW");
+        endRun(g, 99, 600000, "XR!");
+        CHECK(g.highScores[0].initials == "XR!");
+        CHECK(std::any_of(g.accessKeys.begin(), g.accessKeys.end(),
+                          [](const auto &k) { return k.initials == "XR!" && k.unlocked == 97; }));
+        g.beastlyUnlocked = true;
         CHECK(saveRecords(path, g));
+        auto data = nlohmann::json::parse(std::ifstream(path));
+        CHECK(data["version"] == 2 && data["key_bytes"].size() == 16);
         Game restored;
         CHECK(loadRecords(path, restored));
-        CHECK(restored.highScores[0].initials == "XR2" && restored.best == 600000);
-        CHECK(restored.unlockedLevel == 99 && restored.beastlyUnlocked);
-        CHECK(restored.accessKeys[1].unlocked == 17);
+        CHECK(restored.accessKey == -1 && restored.selectedLevel == 1);
+        CHECK(restored.highScores[0].initials == "XR!" && restored.beastlyUnlocked);
+        for (size_t i = 0; i < 4; ++i)
+            CHECK(restored.accessKeys[i].unlocked == g.accessKeys[i].unlocked);
         std::ofstream(path) << "{broken";
         CHECK(!loadRecords(path, restored));
-        CHECK(restored.highScores[0].score == 600000 && restored.unlockedLevel == 99);
-        CHECK(!saveRecords((directory / "absent" / "records.json").string(), g));
-        CHECK(!std::filesystem::exists(path + ".tmp"));
-        std::filesystem::remove_all(directory);
-        std::cout << "Source default scores, initials entry, Beastly unlock, independent access "
-                     "keys and atomic persistence passed\n";
+        CHECK(restored.highScores[0].score == 600000);
+        data["version"] = 1;
+        data.erase("key_bytes");
+        data["keys"] = nlohmann::json::array();
+        for (int level : {35, 1, 17, 99})
+            data["keys"].push_back({{"unlocked", level}, {"beastly", false}});
+        std::ofstream(path) << data;
+        Game migrated;
+        CHECK(loadRecords(path, migrated));
+        CHECK(migrated.accessKeys[0].initials == "YAK" && migrated.accessKeys[0].unlocked == 33);
+        CHECK(!migrated.accessKeys[1].unlocked && !migrated.accessKeys[2].unlocked &&
+              migrated.accessKeys[3].unlocked == 97);
+        CHECK(!saveRecords((dir / "absent" / "records.json").string(), g));
+        std::filesystem::remove_all(dir);
+        std::cout << "Earned keys, odd checkpoints, signature reuse, four-slot replacement, raw "
+                     "key bytes and legacy migration passed\n";
     } catch (const std::exception &e) {
-        std::filesystem::remove_all(directory);
+        std::filesystem::remove_all(dir);
         std::cerr << e.what() << '\n';
         return 1;
     }

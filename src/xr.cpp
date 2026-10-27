@@ -333,8 +333,9 @@ bool XR::frame(Renderer &renderer, const Game &game) {
             inversePose(views[i].pose);
             glTranslatef(x.anchor.x, x.anchor.y, x.anchor.z);
             glRotatef(x.yaw, 0, 1, 0);
-            renderer.world(game, true);
+            renderer.world(game, true, false);
             renderer.finishFrame(game, i, 0, 0, e.width, e.height);
+            renderer.headsetHud(game);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glFlush();
             XrSwapchainImageReleaseInfo release{XR_TYPE_SWAPCHAIN_IMAGE_RELEASE_INFO};

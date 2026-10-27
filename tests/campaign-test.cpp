@@ -19,8 +19,8 @@ static int count(const Game &g, Kind kind) {
         std::count_if(g.enemies.begin(), g.enemies.end(), [&](auto &e) { return e.kind == kind; }));
 }
 static void pickup(Game &g) {
-    g.spawn(Kind::Powerup, g.lane, 0);
-    g.tick(.01f);
+    g.spawn(Kind::Powerup, g.lane, g.warpDistance() / 9 + .01f);
+    g.tick(1.f / 60);
 }
 int main() {
     try {
@@ -80,7 +80,7 @@ int main() {
         g.start();
         g.score = 19500;
         g.enemiesRemaining = 0;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(g.score == 19500);
         CHECK(g.lives == 3);
         g.addScore(40000);
@@ -89,10 +89,10 @@ int main() {
         g.invulnerable = 0;
         g.enemiesRemaining = 0;
         g.spikes[size_t(g.lane + 1)] = .1f;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         step(g, 1);
         g.steer(1);
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(g.lives == 2);
         // Both boundaries of each bonus family preserve the ship-follow rig.
         for (int type = 0; type < 3; ++type) {
@@ -155,7 +155,7 @@ int main() {
             step(g, .3f);
             auto before = g.xrCameraPosition();
             g.spawn(kind, g.lane, .0001f);
-            g.tick(1.f / 120);
+            g.tick(1.f / 30);
             CHECK(g.lives == 2 && g.deathTime > 0);
             CHECK(g.snatched == (kind == Kind::Flipper));
             CHECK(std::hypot(g.xrCameraPosition().x - before.x, g.xrCameraPosition().y - before.y) <
@@ -184,7 +184,7 @@ int main() {
         g.invulnerable = 0;
         g.lives = 1;
         g.spawn(Kind::EnemyShot, g.lane, .0001f);
-        g.tick(1.f / 120);
+        g.tick(1.f / 60);
         CHECK(g.mode == Mode::GameOver);
         while (g.deathTime > 0) {
             auto before = g.xrCameraPosition();
@@ -200,7 +200,7 @@ int main() {
             g.fireHeld = false;
             g.spawn(pair.first, 3, .6f);
             g.shots = {{3, .59f, .58f}};
-            g.tick(.01f);
+            g.tick(1.f / 60);
             CHECK(count(g, pair.second) == 2);
             CHECK(count(g, pair.first) == 0);
         }
@@ -217,19 +217,19 @@ int main() {
         g.waveTime = 1.06f;
         g.spawn(Kind::Pulsar, g.lane, .8f);
         CHECK(g.pulseActive());
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(g.lives == 2);
         g.start();
         g.fireHeld = false;
         g.spawn(Kind::Pulsar, 0, .0001f);
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(count(g, Kind::PulsarSpark) == 2);
         for (Kind kind : {Kind::SuperFlipper, Kind::SuperFlipper2, Kind::Mirror}) {
             g.start();
             g.fireHeld = false;
             g.spawn(kind, 0, .6f);
             g.shots = {{0, .59f, .58f}};
-            g.tick(.01f);
+            g.tick(1.f / 60);
             CHECK(count(g, kind) == (kind == Kind::Mirror ? 1 : 0));
             CHECK(count(g, Kind::MirrorShot) == (kind == Kind::Mirror ? 1 : 0));
             CHECK(g.score == (kind == Kind::Mirror ? 0 : 150));
@@ -238,7 +238,7 @@ int main() {
         g.fireHeld = false;
         g.spawn(Kind::EnemyShot, g.lane, .001f);
         g.invulnerable = 0;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(g.lives == 2);
         CHECK(count(g, Kind::EnemyShot) == 0);
         g.start();
@@ -280,7 +280,7 @@ int main() {
         // Collected droids expire at clearance; a clearance pickup schedules one early grant.
         g.enemies.clear();
         g.enemiesRemaining = 0;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(g.mode == Mode::Transition && !g.droidActive);
         pickup(g);
         CHECK(g.droidPending);
@@ -294,7 +294,7 @@ int main() {
         CHECK(g.droidActive && !g.droidPending && g.earlyDroid && g.powerupStage == 0);
         g.enemies.clear();
         g.enemiesRemaining = 0;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(!g.droidActive && !g.earlyDroid);
         pickup(g);
         CHECK(g.droidPending);
@@ -302,7 +302,7 @@ int main() {
             g.start(cleared);
             g.bonusTokens = 3;
             g.enemiesRemaining = 0;
-            g.tick(.01f);
+            g.tick(1.f / 60);
             step(g, 2.41f);
             constexpr int types[] = {0, 1, 2, 1};
             CHECK(g.mode == Mode::Bonus && g.bonusType == types[cleared / 16 % 4]);
@@ -373,13 +373,14 @@ int main() {
         g.start();
         g.bonusTokens = 3;
         g.enemiesRemaining = 0;
-        g.tick(.01f);
+        g.tick(1.f / 60);
         CHECK(g.mode == Mode::Transition);
         CHECK(std::find(g.sounds.begin(), g.sounds.end(), Sound::ClearanceEngine) !=
               g.sounds.end());
         step(g, 2.41f);
         CHECK(g.mode == Mode::Bonus && g.bonusTokens == 0 && g.level == 2);
-        CHECK(g.bonusGateDistance(0) == 269.5f);
+        // The persistent generator phase carries across earlier bonus flights.
+        CHECK(g.bonusGateDistance(0) > 252 && g.bonusGateDistance(0) <= 269);
         g.bonusX = -3;
         g.bonusY = -3;
         step(g, 9.1f);

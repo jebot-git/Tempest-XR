@@ -1,4 +1,5 @@
 #include "audio.hpp"
+#include "cry.hpp"
 #include "sample_data.hpp"
 #include <cctype>
 #include <cstring>
@@ -126,6 +127,10 @@ static int effectSample(Sound sound) {
         return 19;
     case Sound::AlienBonus:
         return 8;
+    case Sound::Spike:
+        return 13;
+    case Sound::PowerupSpawn:
+        return 9;
     }
     return -1;
 }
@@ -136,7 +141,8 @@ void Audio::mute(bool value) {
     muted = value;
     SDL_UnlockAudioDevice(device);
 }
-void Audio::play(Sound sound) {
+void Audio::play(SoundCue cue) {
+    Sound sound = cue.sound;
     if (!device)
         return;
     SDL_LockAudioDevice(device);
@@ -149,6 +155,7 @@ void Audio::play(Sound sound) {
         break;
     case Sound::Kill:
     case Sound::Ricochet:
+    case Sound::Spike:
     case Sound::FlipperLand:
         priority = 2;
         break;
@@ -160,6 +167,7 @@ void Audio::play(Sound sound) {
         break;
     case Sound::Pickup:
     case Sound::AlienBonus:
+    case Sound::PowerupSpawn:
     case Sound::TankerOpen:
     case Sound::MirrorReflect:
         priority = 3;
@@ -213,6 +221,7 @@ void Audio::play(Sound sound) {
         voice->pan = pan;
         voice->gain = gain;
         voice->loop = loop;
+        voice->pitchWord = pitch > 0 ? pitch : sourceSamples[size_t(which)].pitch;
         voice->loopStart = loopStarts[size_t(which)];
         voice->loopEnd = loopEnds[size_t(which)];
         if (voice->loopEnd <= voice->loopStart)
@@ -246,8 +255,8 @@ void Audio::play(Sound sound) {
         queue(sample, 0, -.2f, .65f);
         queue(sample, 0, .2f, .65f);
     } else if (sound == Sound::Warp) {
-        queue(sample, 0, -.2f, .65f);
-        queue(sample, 0, .2f, .65f);
+        queue(sample, 500, -.2f, .65f);
+        queue(sample, 500, .2f, .65f);
     } else if (sound == Sound::Yes) {
         queue(23, 512, -.2f, .65f, true);
         queue(23, 512, .2f, .65f, true);
@@ -264,7 +273,7 @@ void Audio::play(Sound sound) {
         random = random * 1664525u + 1013904223u;
         queue(sample, int(128 + (random & 255)), 0, 1);
     } else
-        queue(sample, 0, 0, 1);
+        queue(sample, cue.pitch, 0, 1);
     SDL_UnlockAudioDevice(device);
 }
 void Audio::setMusicDirectory(const std::string &directory) {
@@ -321,14 +330,29 @@ void Audio::updateMusic(const Game &game, bool suspended) {
             voices[i].remaining = 0;
     effectChannels = channels;
     gatePeriod = 512 + game.bonusBoosts * 5;
-    for (auto &voice : voices)
-        if (voice.remaining > 0 && voice.sound == Sound::ClearanceEngine) {
-            int pitch = int(10 + game.transitionDepth() * 144);
-            if (voice.sample == 2)
-                pitch *= 2;
-            voice.step =
-                float(effectStep(pitch)) / effectStep(sourceSamples[size_t(voice.sample)].pitch);
+    uint64_t frame = game.frameNumber();
+    int steps = lastModulationFrame != UINT64_MAX && frame >= lastModulationFrame
+                    ? int(std::min<uint64_t>(120, frame - lastModulationFrame))
+                    : 0;
+    if (game.mode != Mode::Paused && !suspended && frame != lastModulationFrame) {
+        for (auto &voice : voices) {
+            if (voice.remaining <= 0)
+                continue;
+            if (voice.sound == Sound::ClearanceEngine) {
+                voice.pitchWord = game.enginePitch * (voice.sample == 2 ? 2 : 1);
+                int tremolo = sourceSines[size_t(game.engineVolumePhase)] >> 3;
+                voice.gain = std::clamp(voice.gain + (voice.sample == 2 ? -tremolo : tremolo) *
+                                                         steps / 255.f,
+                                        0.f, .65f);
+            } else if (voice.sound == Sound::Warp)
+                voice.pitchWord = std::max(1, voice.pitchWord - steps * (voice.pan > 0 ? 2 : 1));
+            else
+                continue;
+            voice.step = float(effectStep(voice.pitchWord)) /
+                         effectStep(sourceSamples[size_t(voice.sample)].pitch);
         }
+        lastModulationFrame = frame;
+    }
     this->suspended = suspended || game.mode == Mode::Paused;
     music.pause(suspended || game.mode == Mode::Paused);
     SDL_UnlockAudioDevice(device);
@@ -382,7 +406,8 @@ void Audio::callback(void *self, Uint8 *stream, int size) {
                     } else
                         v.remaining = 0;
                     if (!v.loop)
-                        v.remaining -= 1.f / 48000;
+                        v.remaining = float(std::max(0.0, double(pcm.size() / 2) - v.position) /
+                                            (48000 * std::max(.0001f, v.step)));
                     continue;
                 }
             }

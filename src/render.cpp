@@ -1,4 +1,8 @@
+#ifndef GL_GLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES
+#endif
 #include "render.hpp"
+#include "cry.hpp"
 #include "meshes.hpp"
 #include "raster_data.hpp"
 #include <SDL.h>
@@ -177,6 +181,13 @@ static bool sourceText(int fontIndex, float x, float y, const std::string &value
     return true;
 }
 void Renderer::releaseGL() {
+    if (feedbackProgram)
+        glDeleteProgram(feedbackProgram);
+    if (cryEncodeTexture)
+        glDeleteTextures(1, &cryEncodeTexture);
+    if (cryPaletteTexture)
+        glDeleteTextures(1, &cryPaletteTexture);
+    feedbackProgram = cryEncodeTexture = cryPaletteTexture = 0;
     for (auto &[name, atlas] : rasterAtlases)
         if (atlas.texture)
             glDeleteTextures(1, &atlas.texture);
@@ -186,72 +197,6 @@ void Renderer::releaseGL() {
             glDeleteTextures(1, &state.texture);
         state = {};
     }
-}
-void Renderer::finishFrame(const Game &g, int view, int x, int y, int width, int height) {
-    auto &state = meltStates.at(size_t(view));
-    bool changed =
-        state.seeded && state.previous != g.mode &&
-        ((state.previous == Mode::Menu && g.mode == Mode::Playing) || g.mode == Mode::GameOver ||
-         g.mode == Mode::Menu || g.mode == Mode::Bonus || g.mode == Mode::Victory);
-    if (changed)
-        state.started = g.time;
-    bool resized = state.width != width || state.height != height;
-    if (!state.texture) {
-        glGenTextures(1, &state.texture);
-        resized = true;
-    }
-    glBindTexture(GL_TEXTURE_2D, state.texture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    float age = g.time - state.started;
-    if (state.seeded && !resized && age >= 0 && age < .65f) {
-        // ffade's scale/rotate/intensity feedback, with an independent history per eye.
-        float dt = std::clamp(g.time - state.lastTime, 0.f, .05f);
-        float scale = std::pow(500.f / 512.f, dt * 60);
-        glDisable(GL_DEPTH_TEST);
-        glDepthMask(GL_FALSE);
-        glEnable(GL_TEXTURE_2D);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glMatrixMode(GL_PROJECTION);
-        glPushMatrix();
-        glLoadIdentity();
-        glOrtho(-1, 1, -1, 1, -1, 1);
-        glMatrixMode(GL_MODELVIEW);
-        glPushMatrix();
-        glLoadIdentity();
-        glRotatef(.7f * std::max(0.f, 1 - age / .12f) * dt * 60, 0, 0, 1);
-        glScalef(scale, scale, 1);
-        glColor4f(.97f, .97f, .97f, .88f * (1 - age / .65f));
-        glBegin(GL_QUADS);
-        glTexCoord2f(0, 0);
-        glVertex2f(-1, -1);
-        glTexCoord2f(1, 0);
-        glVertex2f(1, -1);
-        glTexCoord2f(1, 1);
-        glVertex2f(1, 1);
-        glTexCoord2f(0, 1);
-        glVertex2f(-1, 1);
-        glEnd();
-        glPopMatrix();
-        glMatrixMode(GL_PROJECTION);
-        glPopMatrix();
-        glMatrixMode(GL_MODELVIEW);
-        glDisable(GL_TEXTURE_2D);
-        glDepthMask(GL_TRUE);
-    }
-    glBindTexture(GL_TEXTURE_2D, state.texture);
-    if (resized)
-        glCopyTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, x, y, width, height, 0);
-    else
-        glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, x, y, width, height);
-    state.width = width;
-    state.height = height;
-    state.previous = g.mode;
-    state.seeded = true;
-    state.lastTime = g.time;
 }
 static Color spectrum(float hue, float alpha = 1) {
     constexpr float tau = 6.2831853f;
@@ -630,9 +575,6 @@ void Renderer::particleMessage(const Game &g, bool headset) {
         return; // The bonus briefing already names the objective; keep its controls unobscured.
     if ((g.messageTime <= 0 && g.mode != Mode::GameOver) || g.mode == Mode::Menu)
         return;
-    float t = g.mode == Mode::GameOver ? std::fmod(g.time, 3.f) / 3
-                                       : 1 - g.messageTime / g.messageDuration;
-    float melt = std::max(0.f, (t - .45f) / .55f);
     std::string sprite =
         g.mode == Mode::GameOver                                           ? "gameover"
         : g.message == "EXCELLENT"                                         ? "points2000"
@@ -644,8 +586,15 @@ void Renderer::particleMessage(const Game &g, bool headset) {
     const auto *atlas = rasterAtlas(rect ? rect->atlas : font.atlas);
     if (!atlas)
         return;
+    bool gameOver = g.mode == Mode::GameOver;
+    float scaleX = gameOver ? 1 + sourceSines[size_t((g.frontendFrame() * 15) & 255)] / 320.f
+                            : g.messageScaleX;
+    float scaleY = gameOver ? 1 + sourceSines[size_t((g.frontendFrame() * 17) & 255)] / 600.f
+                            : g.messageScaleY;
+    float shearX = gameOver ? 0 : g.messageShearX, shearY = gameOver ? 0 : g.messageShearY;
     float pixel = rect ? .009f : .0075f;
-    float width = rect ? rect->width * pixel : float(g.message.size() * (font.width + 1)) * pixel;
+    float width =
+        (rect ? rect->width * pixel : float(g.message.size() * (font.width + 1)) * pixel) * scaleX;
     Vec3 origin =
         (headset || g.isBonus() || g.isBonusReturn() ? g.shipPosition() : Vec3{0, 0, -3.8f}) +
         Vec3{-width * .5f, .6f, 1.1f};
@@ -655,26 +604,28 @@ void Renderer::particleMessage(const Game &g, bool headset) {
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
     glBegin(GL_QUADS);
-    auto emit = [&](int ax, int ay, float x, float y, float seed) {
+    auto emit = [&](int ax, int ay, float x, float y) {
         if (ax < 0 || ay < 0 || ax >= atlas->width || ay >= atlas->height)
             return;
         const auto *rgba = atlas->rgba.data() + size_t(ay * atlas->width + ax) * 4;
         if (!rgba[3])
             return;
-        float xx = origin.x + x * pixel + std::sin(seed) * melt * melt * 1.5f;
-        float yy = origin.y - y * pixel + std::cos(seed * 1.7f) * melt * melt;
-        float zz = origin.z + std::sin(seed * .4f) * melt;
-        glColor4f(rgba[0] / 255.f, rgba[1] / 255.f, rgba[2] / 255.f, 1 - melt);
-        float s = pixel * .95f;
-        glVertex3f(xx, yy, zz);
-        glVertex3f(xx + s, yy, zz);
-        glVertex3f(xx + s, yy - s, zz);
-        glVertex3f(xx, yy - s, zz);
+        glColor4f(rgba[0] / 255.f, rgba[1] / 255.f, rgba[2] / 255.f, rgba[3] / 255.f);
+        auto vertex = [&](float px, float py) {
+            glVertex3f(origin.x + (px * scaleX + py * shearX) * pixel,
+                       origin.y - (py * scaleY + px * shearY) * pixel, origin.z);
+        };
+        // Transform the pixel footprint as well as its origin: runmsg stretches
+        // whole glyphs; score/bitmap breakup deliberately keeps fixed pixels.
+        vertex(x, y);
+        vertex(x + .95f, y);
+        vertex(x + .95f, y + .95f);
+        vertex(x, y + .95f);
     };
     if (rect) {
         for (int y = 0; y < rect->height; ++y)
             for (int x = 0; x < rect->width; ++x)
-                emit(rect->x + x, rect->y + y, float(x), float(y), float(y * rect->width + x));
+                emit(rect->x + x, rect->y + y, float(x), float(y));
     } else {
         for (size_t i = 0; i < g.message.size(); ++i) {
             unsigned char ch = g.message[i];
@@ -683,8 +634,7 @@ void Renderer::particleMessage(const Game &g, bool headset) {
             auto xy = font.glyphs[size_t(ch - 32)];
             for (int y = 0; y < font.height; ++y)
                 for (int x = 0; x < font.width; ++x)
-                    emit(xy[0] + x, xy[1] + y, float(i * (font.width + 1) + x), float(y),
-                         float(i * 997 + y * 31 + x));
+                    emit(xy[0] + x, xy[1] + y, float(i * (font.width + 1) + x), float(y));
         }
     }
     glEnd();
@@ -855,18 +805,33 @@ void Renderer::bonusWorld(const Game &g) {
 void Renderer::effectsWorld(const Game &g) {
     constexpr float tau = 6.2831853f;
     for (const auto &fx : g.effects) {
-        Color color = spectrum(float(fx.color) / 256, 1.f);
+        Color color = originalColor(fx.color);
         if (fx.kind == EffectKind::Score) {
             flush();
             std::string sprite = std::to_string(fx.color);
             if (fx.color == 1)
                 continue;
-            glPushMatrix();
-            glTranslatef(fx.pos.x, fx.pos.y + float(fx.frame) * .005f, fx.pos.z);
-            float size = .2f + float(fx.frame) * .006f;
-            drawRaster(sprite, -size, size * .3f, size * 2, -size * .6f,
-                       {1, 1, 1, 1 - float(fx.frame) / 32});
-            glPopMatrix();
+            const auto *region = sourceSprite(sprite);
+            const auto *atlas = region ? rasterAtlas(region->atlas) : nullptr;
+            if (!atlas)
+                continue;
+            float expansion = float(1 + fx.frame * 2) / 4;
+            glBegin(GL_QUADS);
+            for (int y = 0; y < region->height; ++y)
+                for (int x = 0; x < region->width; ++x) {
+                    const auto *rgba = atlas->rgba.data() +
+                                       size_t((region->y + y) * atlas->width + region->x + x) * 4;
+                    if (!rgba[3])
+                        continue;
+                    glColor4ub(rgba[0], rgba[1], rgba[2], rgba[3]);
+                    float xx = fx.pos.x + (x - region->width * .5f) * .006f * expansion;
+                    float yy = fx.pos.y - (y - region->height * .5f) * .006f * expansion;
+                    glVertex3f(xx, yy, fx.pos.z);
+                    glVertex3f(xx + .005f, yy, fx.pos.z);
+                    glVertex3f(xx + .005f, yy - .005f, fx.pos.z);
+                    glVertex3f(xx, yy - .005f, fx.pos.z);
+                }
+            glEnd();
             continue;
         }
         if (fx.kind == EffectKind::Splatter || fx.kind == EffectKind::Pickup) {
@@ -887,24 +852,35 @@ void Renderer::effectsWorld(const Game &g) {
         }
         bool sphere = fx.kind == EffectKind::Sphere || fx.kind == EffectKind::Firework;
         int age = fx.kind == EffectKind::Firework ? fx.frame - fx.duration - 1 : fx.frame;
-        float radius = age * (sphere ? .025f : .015f);
+        float radius =
+            sphere ? (fx.kind == EffectKind::Firework ? age * 4 : (age * 2 + 1) * 4) * .02625f
+                   : age * .02625f;
         color.a = std::clamp(
             1 - float(age) / (fx.kind == EffectKind::Firework ? 63 : fx.duration + 1), 0.f, 1.f);
-        int rings = sphere ? (fx.kind == EffectKind::Firework ? 32 : 64) : 3;
+        int rings = sphere ? (64 >> std::clamp(fx.density - 1, 0, 3)) : 3;
         for (int ring = 0; ring < rings; ++ring) {
-            int pixels = sphere ? (fx.kind == EffectKind::Firework ? 8 : 16) : 16 - ring * 2;
+            int pixels = sphere ? (16 >> std::clamp(fx.density - 1, 0, 3)) : 16 - ring * 2;
             float latitude = sphere ? -1.5707963f + (ring + .5f) * 3.14159265f / rings : 0;
             float r = sphere ? radius * std::cos(latitude) : radius * float(1 << ring);
             for (int pixel = 0; pixel < pixels; ++pixel) {
-                float phase = (float(pixel) / pixels + ring * .03125f) * tau + g.time;
-                Vec3 p = fx.pos + Vec3{std::cos(phase) * r, std::sin(phase) * r,
+                int phaseByte = (pixel * 256 / pixels +
+                                 ring * (sphere ? 8 << std::clamp(fx.density - 1, 0, 3) : 0) +
+                                 int(g.frameNumber())) &
+                                255;
+                color = originalColor(sphere ? fx.color : pulseHue(age << ring),
+                                      sphere ? std::max(0, 255 - age * 4) : 255);
+                Vec3 p = fx.pos + Vec3{float(sourceSines[size_t((phaseByte + 64) & 255)]) / 128 * r,
+                                       float(sourceSines[size_t(phaseByte)]) / 128 * r,
                                        sphere ? std::sin(latitude) * radius : -ring * .225f};
                 line(p, p + Vec3{.012f, .005f, 0}, color);
             }
         }
     }
 }
-void Renderer::world(const Game &g, bool headset) {
+void Renderer::world(const Game &presentation, bool headset, bool drawHud) {
+    const Game &g = presentation.mode == Mode::Menu && presentation.attractGame
+                        ? *presentation.attractGame
+                        : presentation;
     glDisable(GL_LIGHTING);
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
@@ -979,8 +955,8 @@ void Renderer::world(const Game &g, bool headset) {
         flush();
         particleMessage(g, headset);
         glPopMatrix();
-        if (headset)
-            headsetHud(g);
+        if (headset && drawHud)
+            headsetHud(presentation);
         return;
     }
     int n = g.web.lanes();
@@ -1152,8 +1128,8 @@ void Renderer::world(const Game &g, bool headset) {
         drawRaster("logo", -1.5f, .5625f, 3, -1.125f);
         glPopMatrix();
     }
-    if (headset)
-        headsetHud(g);
+    if (headset && drawHud)
+        headsetHud(presentation);
 }
 std::vector<std::string> Renderer::xrHudLines(const Game &g) {
     std::vector<std::string> result;
@@ -1173,19 +1149,9 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
                      number(std::min(6, g.powerupStage)) + "/6");
     result.push_back(std::string("LASER ") + (g.boost ? "ON" : "OFF") + "   DROID " +
                      (g.droidActive ? "ON" : "OFF"));
-    if (g.mode == Mode::Menu) {
-        result.push_back("START WEB " + number(g.selectedLevel, 2) + " / UNLOCKED " +
-                         number(g.unlockedLevel, 2));
-        result.push_back("WHEEL SELECT / CLICK OR ENTER TO START");
-        result.push_back(std::string("KEY ") + Game::keyNames[g.accessKey] + " / K CHANGE KEY");
-        if (g.beastlyUnlocked)
-            result.push_back(g.beastly ? "BEASTLY / DOUBLE SCORE / O NORMAL"
-                                       : "O ENABLE BEASTLY MODE");
-    } else if (g.mode == Mode::Victory) {
-        result.push_back("SUPERSTAR / CAMPAIGN COMPLETE");
-        result.push_back(g.beastly ? "TOTALLY AWESOME / BEASTLY COMPLETE"
-                                   : "BEASTLY UNLOCKED / O AT LEVEL SELECT");
-        result.push_back("ESC LEVEL SELECT / ENTER PLAY AGAIN");
+    if (g.mode == Mode::Menu || g.mode == Mode::Victory) {
+        auto front = g.frontendLines();
+        result.insert(result.end(), front.begin(), front.end());
     } else if (g.mode == Mode::GameOver) {
         result.push_back("GAME OVER / CLICK OR ENTER TO RETRY");
     } else {
@@ -1220,10 +1186,9 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
         else
             result.push_back("WHEEL MOVE / RMB ZAP / MMB JUMP");
     }
-    if (g.enteringScore) {
-        result.push_back("HIGH SCORE / " + g.scoreInitials + " / LETTER " +
-                         number(g.scoreCursor + 1));
-        result.push_back("WHEEL LETTER / LMB NEXT / ENTER SAVE");
+    if (g.enteringScore || (g.mode == Mode::GameOver && g.frontPage == FrontPage::Scores)) {
+        auto front = g.frontendLines();
+        result.insert(result.end(), front.begin(), front.end());
     }
     if (g.isBonus()) {
         auto instructions = bonusInstructions(g);
@@ -1258,7 +1223,8 @@ void Renderer::headsetHud(const Game &g) {
     size_t instructionStart = lines.size() - instructions.size();
     for (size_t i = 0; i < lines.size(); ++i) {
         // Inventory stays above the rim; mode/bonus prompts sit below it.
-        float y = i < 5                   ? float(i) * 22
+        float y = g.mode == Mode::Menu || g.mode == Mode::Victory || g.enteringScore ? float(i) * 24
+                  : i < 5                                                            ? float(i) * 22
                   : i >= instructionStart ? 120 + float(i - instructionStart) * 24
                                           : 630 + float(i - 5) * 24;
         text(0, y, lines[i], 1.4f, i < 2 ? white : i < 5 ? cyan : lime);
@@ -1340,80 +1306,63 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
         sourceText(1, 70, 445, "2000", 11, white);
         text(71, 531, "THE WEB IS WAITING.", 2, pink);
         text(71, 578, "SCROLL THE RIM. CLEAR THE TUBE.", 1.55f, {.57f, .67f, .8f});
-        text(71, 608,
-             "START WEB " + number(g.selectedLevel, 2) + " / UNLOCKED " +
-                 number(g.unlockedLevel, 2),
-             1.55f, cyan);
-        text(71, 638, "WHEEL / ARROWS SELECT STARTING WEB", 1.25f, {.57f, .67f, .8f});
+        text(71, 608, "NEW GAME STARTS AT WEB 1", 1.55f, cyan);
+        text(71, 638, "K USE SAVED PLAYER KEY", 1.25f, {.57f, .67f, .8f});
         rect(70, 662, 410, 62, {.07f, .73f, .86f, 1});
         text(100, 683, "> ENTER TO PLAY", 2.3f, {.015f, .04f, .065f});
         text(71, 743, "JEFF MINTER / ATARI 1994 - SOURCE STUDY", 1.05f, {.3f, .43f, .58f});
-        text(720, 195, std::string("PLAYER ACCESS KEY ") + Game::keyNames[g.accessKey], 2, cyan);
-        text(720, 228, "K CHANGE KEY / PROGRESS SAVED PER KEY", 1.4f, white);
+        auto front = g.frontendLines();
+        for (size_t i = 0; i < front.size(); ++i)
+            text(720, 195 + float(i) * 37, front[i], i ? 1.6f : 2.f, i ? white : lime);
         if (g.beastlyUnlocked)
-            text(720, 266, g.beastly ? "O BEASTLY ON / DOUBLE SCORE" : "O ENABLE BEASTLY MODE",
+            text(720, 720, g.beastly ? "O BEASTLY ON / DOUBLE SCORE" : "O ENABLE BEASTLY MODE",
                  1.6f, pink);
-        int page = int(g.time / 12) % 3;
-        if (page == 0) {
-            text(720, 316, "TEMPEST DUDES / HIGH SCORES", 2, lime);
-            for (size_t i = 0; i < g.highScores.size(); ++i) {
-                const auto &entry = g.highScores[i];
-                text(720, 362 + float(i) * 31,
-                     number(int(i) + 1, 2) + "  " + entry.initials + "  " + number(entry.score, 8),
-                     1.9f, i ? white : pink);
-            }
-        } else if (page == 1) {
-            const char *tutorial[] = {"HOW TO PLAY",
-                                      "WHEEL ROTATES AROUND THE RIM",
-                                      "HOLD LMB TO FIRE",
-                                      "RMB SUPERZAPPER / TWO CHARGES",
-                                      "COLLECT LASER THEN JUMP THEN DROID",
-                                      "MMB / SPACE JUMPS AFTER PICKUP",
-                                      "THREE TOKENS OPEN A BONUS",
-                                      "BONUS WHEEL ADDS DRIFT",
-                                      "REVERSE WHEEL TO BRAKE",
-                                      "RINGS: LMB UP / RMB DOWN"};
-            for (int i = 0; i < 10; ++i)
-                text(720, 316 + float(i) * 34, tutorial[i], i ? 1.5f : 2, i ? white : lime);
-        } else {
-            const char *credits[] = {"ORIGINAL TEMPEST 2000 / 1994",
-                                     "GAME DESIGN / JEFF MINTER",
-                                     "ORIGINAL TEMPEST / DAVE THEURER",
-                                     "MUSIC / IMAGITEC DESIGN",
-                                     "VOICES / TED AND CARRIE TAHQUECHI",
-                                     "PRODUCER / JOHN SKRUCH",
-                                     "ATARI CORPORATION",
-                                     "TEMPEST XR / SOURCE RECREATION",
-                                     "DESKTOP / OPENXR / ROTARY INPUT"};
-            for (int i = 0; i < 9; ++i)
-                text(720, 316 + float(i) * 36, credits[i], i ? 1.5f : 2, i ? white : lime);
-        }
     } else {
-        if (g.enteringScore) {
-            text(575, 570, "HIGH SCORE " + g.scoreInitials, 3, lime);
-            text(575 + 11 * 18 + float(g.scoreCursor) * 18, 599, "^", 3, pink);
-            text(350, 643, "WHEEL LETTER / LMB NEXT / RMB BACK / ENTER SAVE", 1.8f, white);
+        bool frontOverlay = (g.mode == Mode::GameOver || g.mode == Mode::Victory) &&
+                            (g.enteringScore || g.frontPage == FrontPage::Scores ||
+                             g.frontPage == FrontPage::Congratulations);
+        if (frontOverlay) {
+            auto front = g.frontendLines();
+            for (size_t i = 0; i < front.size(); ++i)
+                text(280, 235 + float(i) * 37, front[i], i ? 2.f : 2.5f, i ? white : lime);
+            if (g.enteringScore) {
+                constexpr char legal[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ .!-?*";
+                for (int offset = -5; offset <= 5; ++offset) {
+                    int ch = (int(std::round(g.scoreWheelPosition)) + offset + 64) % 32;
+                    std::string label = ch == 30   ? "DEL"
+                                        : ch == 31 ? "END"
+                                                   : std::string(1, legal[ch]);
+                    text(650 + offset * 65, 510 + std::abs(offset) * 8, label, offset ? 2.f : 3.5f,
+                         offset ? cyan : pink);
+                }
+            }
         }
         rect(48, 775, 1344, 3, {.08f, .16f, .23f, 1});
         rect(48, 775, 1344 * g.progress(), 3, cyan);
-        if (g.mode == Mode::Paused || g.mode == Mode::GameOver || g.mode == Mode::Transition ||
-            g.mode == Mode::Victory) {
+        if (!frontOverlay && (g.mode == Mode::Paused || g.mode == Mode::GameOver ||
+                              g.mode == Mode::Transition || g.mode == Mode::Victory)) {
             std::string label = g.mode == Mode::Victory    ? "SUPERSTAR"
                                 : g.mode == Mode::Paused   ? "PAUSED"
                                 : g.mode == Mode::GameOver ? "GAME OVER"
                                                            : "WEB CLEAR";
             float x = 720 - float(label.size()) * 6 * 6 / 2;
             bool rasterTitle =
-                g.mode == Mode::GameOver && drawRaster("gameover", 580, 348, 280, 131);
+                g.mode == Mode::GameOver &&
+                drawRaster(
+                    "gameover",
+                    720 - (320 + sourceSines[size_t((g.frontendFrame() * 15) & 255)]) * .5f,
+                    400 - (150 + sourceSines[size_t((g.frontendFrame() * 17) & 255)] * .25f) * .5f,
+                    320 + sourceSines[size_t((g.frontendFrame() * 15) & 255)],
+                    150 + sourceSines[size_t((g.frontendFrame() * 17) & 255)] * .25f);
             if (!rasterTitle)
                 text(x, 375, label, 6, g.mode == Mode::GameOver ? pink : cyan);
             std::string sub =
-                g.mode == Mode::Victory    ? (g.beastly ? "BEASTLY COMPLETE / SIX CUPS OF TEA!"
-                                                        : "BEASTLY UNLOCKED / ESC LEVEL SELECT")
-                : g.mode == Mode::Paused   ? "P / ESC TO RESUME"
-                : g.mode == Mode::GameOver ? (g.enteringScore ? "HIGH SCORE / ENTER INITIALS BELOW"
-                                                              : "ENTER TO PLAY AGAIN")
-                                           : "";
+                g.mode == Mode::Victory  ? (g.beastly ? "BEASTLY COMPLETE / SIX CUPS OF TEA!"
+                                                      : "BEASTLY UNLOCKED / ESC TITLE")
+                : g.mode == Mode::Paused ? "P / ESC TO RESUME"
+                : g.mode == Mode::GameOver
+                    ? (g.enteringScore ? "HIGH SCORE / ENTER INITIALS BELOW" : "FIRE TO CONTINUE")
+                    : "";
             text(720 - float(sub.size()) * 6 * 1.8f / 2, rasterTitle ? 510 : 462, sub, 1.8f, white);
         }
         if (g.isBonus()) {
