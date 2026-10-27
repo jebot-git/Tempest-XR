@@ -1259,8 +1259,10 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
         rect(48, 775, 1344 * g.progress(), 3, cyan);
         if (g.mode == Mode::Paused || g.mode == Mode::GameOver || g.mode == Mode::Transition ||
             g.mode == Mode::Victory) {
-            rect(375, 330, 690, 210, {.005f, .012f, .03f, .94f});
-            rect(375, 330, 690, 2, cyan);
+            if (g.mode != Mode::Transition) {
+                rect(375, 330, 690, 210, {.005f, .012f, .03f, .94f});
+                rect(375, 330, 690, 2, cyan);
+            }
             std::string label = g.mode == Mode::Victory    ? "SUPERSTAR"
                                 : g.mode == Mode::Paused   ? "PAUSED"
                                 : g.mode == Mode::GameOver ? "GAME OVER"

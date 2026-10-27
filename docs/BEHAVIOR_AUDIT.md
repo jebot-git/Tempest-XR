@@ -395,13 +395,15 @@ initializes the comparison pattern to zero and uses the transparent glyph
 blit path. `drawmsg` adds animated shear and the message controller changes
 scale/motion. This should not be confused with a solid black text card.
 
-The recreation instead draws a nearly opaque dark rectangle in desktop
-Transition HUD (render.cpp:1257), with `WEB CLEAR` and `AVOID SPIKES / JUMP TO
-CLEAR` on every wave. The headset text is also unconditional, although it
-has no corresponding centered desktop card. The rectangle, universal warning
-and jump wording are modern additions. Correcting their scope/presentation
-remains an evaluation finding; the requested autofire removal does not change
-that UI.
+At `366a330`, the recreation drew a nearly opaque dark rectangle in desktop
+Transition HUD, with `WEB CLEAR` and `AVOID SPIKES / JUMP TO CLEAR` on every
+wave. The headset text was also unconditional, without that centered card.
+
+The requested panel-removal follow-up now draws the transition lettering
+directly over the tunnel, removing both the dark rectangle and its cyan border.
+The universal warning, added jump wording, duplicate clearance announcements
+and original message timing/animation still differ from the source. Those are
+separate remaining presentation details.
 
 ### Requested rotary bonus control follow-up
 
@@ -417,4 +419,5 @@ The primary input behavior is translated; vertical meter-space bounds and
 hardware rotary calibration remain adapted. The preserved secondary-pad
 fall-through is excluded for the single-mouse interface, as detailed in
 SOURCE_NOTES.md. This follow-up leaves the hit/spawn/budget/geometry/clearance
-and text-panel findings above open.
+and warning-timing findings above open; the obstructing transition panel was
+removed in the subsequent panel-removal follow-up.

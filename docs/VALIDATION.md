@@ -126,3 +126,9 @@ friction, simultaneous-button priority and paused/finished input. The seven
 simulated native XR scenarios passed with the new movement. Desktop and stereo
 briefings were inspected; the duplicate bonus-entry announcement is suppressed
 so it does not obscure the controls.
+
+The clearance-panel removal passes `xr-sky-and-effects` and an offscreen
+wave-four warp capture with `gl_error=0`. Before/after 90-frame captures were
+compared: the header and footer are byte-identical, while the former panel
+region exposes the tunnel lines behind the unchanged lettering. The dark
+background and its border no longer draw during the clearance flight.
