@@ -65,4 +65,9 @@ endforeach()
 if(BUILD_TESTING AND TEMPEST_OPENXR)
   add_library(tempest-mock-openxr SHARED tests/mock-openxr.cpp)
   target_link_libraries(tempest-mock-openxr PRIVATE OpenGL::GL PkgConfig::OPENXR)
+  if(Python3_Interpreter_FOUND)
+    add_test(NAME xr-runtime-failure COMMAND ${Python3_EXECUTABLE}
+      ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_xr_failure.py
+      --game $<TARGET_FILE:tempest-xr> --runtime $<TARGET_FILE:tempest-mock-openxr>)
+  endif()
 endif()

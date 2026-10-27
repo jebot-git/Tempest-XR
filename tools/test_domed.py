@@ -77,9 +77,9 @@ try:
             return [line for line in file.read_text().splitlines() if line.endswith(' 1')] if file.exists() else []
         def restored():
             s=scene();return s['presentation']==before['presentation'] and s['focused']==old_id and s['active_workspace']==before['active_workspace']
-        def launch(realm,name):
+        def launch(realm,name,extra=None):
             report=out/(name+'-report.json');report.unlink(missing_ok=True);log=out/(name+'-frames.log');log.unlink(missing_ok=True)
-            child=start([a.game,'--demo','--no-audio','--report',report],{**env,'WAYLAND_DISPLAY':realm,'LD_PRELOAD':str(a.runtime.resolve()),'TEMPEST_TEST_FRAMES':str(log)},name)
+            child=start([a.game,'--demo','--no-audio','--report',report],{**env,'WAYLAND_DISPLAY':realm,'LD_PRELOAD':str(a.runtime.resolve()),'TEMPEST_TEST_FRAMES':str(log),**(extra or {})},name)
             w=wait(lambda:next((w for w in scene()['windows'] if w.get('client_pid')==child.pid),None))
             return child,w['id'],report,log
         game,gid,report,frame_log=launch(xr,'xr-launch')
@@ -108,6 +108,15 @@ try:
         os.kill(game.pid,signal.SIGSTOP);wait(lambda:native()['owner'] is None,seconds=7);wait(restored)
         check(True,'Expired heartbeat restores the desktop even when all game threads are stopped')
         os.kill(game.pid,signal.SIGKILL);game.wait()
+        game,gid,report,frame_log=launch(xr,'runtime-failure',{'TEMPEST_TEST_FAIL_FRAME':'12'})
+        wait(lambda:'XR session ended:' in (out/'runtime-failure.log').read_text())
+        wait(lambda:native()['owner'] is None)
+        w=wait(lambda:next((w for w in scene()['windows'] if w['id']==gid and w['desktop_visible'] and not w['xr_visible']),None))
+        check(scene()['presentation']==before['presentation'],'Runtime exception restores bar/desktop presentation and releases the native XR lease')
+        request('/api/action',{'op':'close','id':gid});wait(lambda:game.poll() is not None)
+        stats=json.loads(report.read_text())
+        check(stats['paused'] and not stats['captured'] and not stats['relative_mouse'] and not stats['xr_intent'],'Runtime exception releases SDL capture and pauses the actual game before normal exit')
+        request('/api/action',{'op':'focus','id':old_id})
         # A pre-integration DomeD must be rejected before creating an XR session.
         from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
         class OldDome(BaseHTTPRequestHandler):
