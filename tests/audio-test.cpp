@@ -64,6 +64,12 @@ struct AudioProbe {
         audio.play(Sound::FlipperLand);
         CHECK(audio.voices[0].sample == 28 && audio.voices[0].priority == 2);
         audio.voices = {};
+        audio.play(Sound::TankerOpen);
+        CHECK(audio.voices[0].sample == 17 && audio.voices[1].sample == 17);
+        CHECK(audio.voices[0].priority == 3);
+        CHECK(std::abs(audio.voices[0].step -
+                       float(effectStep(60)) / effectStep(sourceSamples[17].pitch)) < .0001f);
+        audio.voices = {};
         audio.play(Sound::OneUp);
         CHECK(audio.voices[0].remaining > 0 && audio.voices[1].remaining == 0);
         audio.voices = {};

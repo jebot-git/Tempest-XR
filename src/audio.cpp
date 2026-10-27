@@ -120,6 +120,8 @@ static int effectSample(Sound sound) {
         return 0;
     case Sound::FlipperLand:
         return 28;
+    case Sound::TankerOpen:
+        return 17;
     }
     return -1;
 }
@@ -153,6 +155,7 @@ void Audio::play(Sound sound) {
         priority = 51;
         break;
     case Sound::Pickup:
+    case Sound::TankerOpen:
         priority = 3;
         break;
     case Sound::Hit:
@@ -228,6 +231,9 @@ void Audio::play(Sound sound) {
     } else if (sound == Sound::Snatch || sound == Sound::BonusToken) {
         queue(sample, 0, -.2f, .65f);
         queue(sample, 0, .2f, .65f);
+    } else if (sound == Sound::TankerOpen) {
+        queue(sample, 60, -.2f, .65f);
+        queue(sample, 61, .2f, .65f);
     } else if (sound == Sound::Pulse) {
         queue(sample, 500, 0, 1);
     } else if (sound == Sound::Wave) {

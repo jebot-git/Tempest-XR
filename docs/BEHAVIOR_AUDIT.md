@@ -241,3 +241,10 @@ present and are not counted as missing implementations.
    pulsars place both sparks on the original lane with opposite directions.
    Quiet-phase lethality, same-tick contact, jump protection and edge timing
    have regressions; spark shot score follows `fkillme`.
+
+4. **Tanker opening implemented.** All three families open only on a valid hit
+   or at the rim. Flipper/pulsar children start pivoted turns at the parent's
+   depth, then resume climbing/their own handler; they cannot capture the old
+   lane during emergence. The original paired sample-17 pitch-60/61 cue replaces
+   the generic explosion. Tests cover early non-opening, rim release and
+   mid-web child turns. Fuseball crossing refinements are part of step six.

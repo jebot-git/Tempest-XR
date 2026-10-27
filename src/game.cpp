@@ -174,7 +174,7 @@ bool Game::flipperKind(Kind kind) {
            kind == Kind::Beast;
 }
 bool Game::shotVulnerable(const Enemy &e) {
-    return !flipperKind(e.kind) || e.motion != FlipperMotion::Turning ||
+    return !flipperBody(e) || e.motion != FlipperMotion::Turning ||
            std::abs(std::remainder(e.turnArc - e.turnAngle, 256.f)) <= 52.f;
 }
 void Game::startFlipperTurn(Enemy &e) {
@@ -187,6 +187,9 @@ void Game::startFlipperTurn(Enemy &e) {
     // _fset's exact half-web tie goes the other way, including circular wrap.
     if (web.closed && std::abs(delta) >= web.lanes() / 2)
         direction = -direction;
+    beginFlipperTurn(e, direction);
+}
+void Game::beginFlipperTurn(Enemy &e, int direction) {
     int destination = boundedLane(e.lane + direction);
     if (destination == e.lane) {
         direction = -direction;
@@ -204,7 +207,7 @@ void Game::startFlipperTurn(Enemy &e) {
     e.motion = FlipperMotion::Turning;
 }
 float Game::flipRotation(const Enemy &e) const {
-    if (!flipperKind(e.kind) || e.motion != FlipperMotion::Turning || e.turnFrom < 0)
+    if (!flipperBody(e) || e.motion != FlipperMotion::Turning || e.turnFrom < 0)
         return 0;
     int pivot = e.turnFrom + (e.direction > 0 ? 1 : 0);
     Vec3 a = position(float(e.turnFrom), e.depth) - edge(pivot, e.depth),
@@ -218,7 +221,7 @@ float Game::flipRotation(const Enemy &e) const {
     return angle * std::clamp(e.turnAngle / e.turnArc, 0.f, 1.f);
 }
 Vec3 Game::enemyPosition(const Enemy &e) const {
-    if (flipperKind(e.kind) && e.motion == FlipperMotion::Turning && e.turnFrom >= 0) {
+    if (flipperBody(e) && e.motion == FlipperMotion::Turning && e.turnFrom >= 0) {
         int pivotLane = e.turnFrom + (e.direction > 0 ? 1 : 0);
         Vec3 pivot = edge(pivotLane, e.depth), a = position(float(e.turnFrom), e.depth) - pivot,
              b = position(float(e.lane), e.depth) - pivot;
@@ -231,7 +234,7 @@ Vec3 Game::enemyPosition(const Enemy &e) const {
     return e.kind == Kind::Fuseball ? edge(e.lane + 1, e.depth) : position(float(e.lane), e.depth);
 }
 Vec3 Game::enemyTangent(const Enemy &e) const {
-    int visualLane = flipperKind(e.kind) && e.motion == FlipperMotion::Turning && e.turnFrom >= 0
+    int visualLane = flipperBody(e) && e.motion == FlipperMotion::Turning && e.turnFrom >= 0
                          ? e.turnFrom
                          : e.lane;
     Vec3 t = edge(visualLane + 1, e.depth) - edge(visualLane, e.depth);
@@ -304,6 +307,22 @@ static Enemy makeEnemy(Kind kind, int lane, float depth, int direction) {
     e.firing = 1.5f;
     return e;
 }
+void Game::openTanker(Enemy &e, std::vector<Enemy> &children) {
+    Kind contents = e.kind == Kind::FuseTanker     ? Kind::Fuseball
+                    : e.kind == Kind::PulsarTanker ? Kind::Pulsar
+                                                   : Kind::Flipper;
+    for (int direction : {-1, 1}) {
+        auto child = makeEnemy(contents, e.lane, std::max(0.f, e.depth), direction);
+        if (contents == Kind::Flipper || contents == Kind::Pulsar) {
+            child.emerging = true;
+            child.rim = child.depth == 0;
+            beginFlipperTurn(child, direction);
+        } else
+            child.lane = boundedLane(e.lane + direction);
+        children.push_back(child);
+    }
+    destroy(e);
+}
 void Game::spawn(Kind kind, int spawnLane, float depth) {
     int l = spawnLane < 0 ? int(randf(0, float(web.lanes()) - .001f)) : boundedLane(spawnLane);
     enemies.push_back(makeEnemy(kind, l, depth, randf(0, 1) > .5f ? 1 : -1));
@@ -344,9 +363,14 @@ void Game::destroy(Enemy &e, bool zap) {
     default:
         break;
     }
+    if (e.emerging)
+        points = 150; // Tanker children still run the flipper handler.
     addScore(points);
     if (!zap) {
-        sounds.push_back(Sound::Kill);
+        sounds.push_back(e.kind == Kind::Tanker || e.kind == Kind::FuseTanker ||
+                                 e.kind == Kind::PulsarTanker
+                             ? Sound::TankerOpen
+                             : Sound::Kill);
         kills++;
         if (--killsToPowerup <= 0) {
             pending.push_back(makeEnemy(Kind::Powerup, e.lane, std::clamp(e.depth, .1f, .95f), 1));
@@ -857,7 +881,7 @@ void Game::tick(float dt) {
             speed *= 1.25f;
         if (e.kind == Kind::Beast)
             speed *= 1.6f;
-        if (flipperKind(e.kind)) {
+        if (flipperBody(e)) {
             // sweb fixes the T2K rotation-table selector to 16, then indexes
             // rospeeds -> crossdels -> pauses. Counter expiry includes zero.
             int rotation = rospeeds[1];
@@ -880,9 +904,13 @@ void Game::tick(float dt) {
                 e.turnAngle = std::min(e.turnArc, frame.angleEnd);
                 if (e.turnAngle >= e.turnArc) {
                     e.motion = FlipperMotion::Stopped;
-                    e.stopTime = e.kind == Kind::Flipper ? pause : 0;
+                    e.stopTime = e.kind == Kind::Flipper && !e.emerging ? pause : 0;
                     sounds.push_back(Sound::FlipperLand);
                 }
+            } else if (e.emerging) {
+                e.emerging = false;
+                e.motion = FlipperMotion::Climbing;
+                e.rim = false;
             } else {
                 e.stopTime -= dt;
                 if (e.stopTime <= 0)
@@ -1032,13 +1060,7 @@ void Game::tick(float dt) {
         bool tanker =
             e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker;
         if (tanker) {
-            Kind contents = e.kind == Kind::FuseTanker     ? Kind::Fuseball
-                            : e.kind == Kind::PulsarTanker ? Kind::Pulsar
-                                                           : Kind::Flipper;
-            for (int d : {-1, 1})
-                children.push_back(
-                    makeEnemy(contents, boundedLane(e.lane + d), std::max(.16f, e.depth), d));
-            destroy(e);
+            openTanker(e, children);
         } else if (e.kind == Kind::Mirror) {
             e.hp -= powered ? 2 : 1;
             if (!powered)
@@ -1083,9 +1105,10 @@ void Game::tick(float dt) {
             }
             continue;
         }
-        if (flipperKind(e.kind)) {
-            bool catches =
-                frame.turning ? !shotVulnerable(e) && e.turnFrom == lane : e.rim && e.lane == lane;
+        if (flipperBody(e)) {
+            bool catches = !e.emerging && std::abs(e.depth) <= 2.f / 160 &&
+                           (frame.turning ? !shotVulnerable(e) && e.turnFrom == lane
+                                          : e.rim && e.lane == lane);
             if (catches) {
                 hit(true);
                 if (deathTime > 0 && snatched)
@@ -1099,14 +1122,9 @@ void Game::tick(float dt) {
             hit();
         bool tanker =
             e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker;
-        if (tanker && e.depth < .22f) {
-            Kind contents = e.kind == Kind::FuseTanker     ? Kind::Fuseball
-                            : e.kind == Kind::PulsarTanker ? Kind::Pulsar
-                                                           : Kind::Flipper;
-            for (int d : {-1, 1})
-                children.push_back(
-                    makeEnemy(contents, boundedLane(e.lane + d), std::max(.16f, e.depth), d));
-            destroy(e);
+        if (tanker && e.depth <= 0) {
+            e.depth = 0;
+            openTanker(e, children);
             continue;
         }
         if (e.depth <= 0) {

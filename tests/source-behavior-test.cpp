@@ -120,6 +120,42 @@ int main() {
             g.tick(dt);
             CHECK(g.enemies[0].lane == g.boundedLane(at + 1));
         }
+        for (auto family : {Kind::Tanker, Kind::FuseTanker, Kind::PulsarTanker}) {
+            auto g = setup();
+            int at = g.boundedLane(g.lane + 3);
+            g.spawn(family, at, .22f);
+            g.tick(dt);
+            CHECK(count(g, family) == 1 && g.score == 0);
+            g.enemies[0].depth = .00001f;
+            g.tick(dt);
+            CHECK(count(g, family) == 0 && g.enemies.size() == 3 && g.score == 100);
+            CHECK(std::find(g.sounds.begin(), g.sounds.end(), Sound::TankerOpen) != g.sounds.end());
+            int contents = 0;
+            for (const auto &e : g.enemies)
+                if (e.kind != Kind::Powerup) {
+                    ++contents;
+                    CHECK(e.depth == 0);
+                    if (family != Kind::FuseTanker)
+                        CHECK(e.emerging && e.motion == FlipperMotion::Turning && e.turnFrom == at);
+                }
+            CHECK(contents == 2);
+        }
+        {
+            auto g = setup();
+            int at = g.boundedLane(g.lane + 3);
+            g.spawn(Kind::Tanker, at, .6f);
+            g.shots = {{at, .59f, .59f}};
+            g.tick(dt);
+            CHECK(count(g, Kind::Flipper) == 2);
+            for (auto &e : g.enemies)
+                if (e.kind == Kind::Flipper)
+                    CHECK(e.depth > .59f && e.emerging);
+            for (int i = 0; i < 80; ++i)
+                g.tick(dt);
+            CHECK(std::any_of(g.enemies.begin(), g.enemies.end(), [](auto &e) {
+                return e.kind == Kind::Flipper && !e.emerging && e.depth < .59f;
+            }));
+        }
         std::cout
             << "Source wave clearance, retained enemies and single-hit super flippers passed\n";
         return 0;

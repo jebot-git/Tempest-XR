@@ -58,7 +58,8 @@ enum class Sound {
     Yes,
     ClearanceEngine,
     BonusToken,
-    FlipperLand
+    FlipperLand,
+    TankerOpen
 };
 enum class FlipperMotion { Climbing, Turning, Stopped };
 struct Enemy {
@@ -67,7 +68,7 @@ struct Enemy {
     float depth = 1, age = 0, flip = 0;
     int direction = 1;
     bool rim = false, dead = false;
-    bool retreating = false;
+    bool retreating = false, emerging = false;
     int hp = 1;
     float firing = 0, sparkTime = 5.f / 60;
     FlipperMotion motion = FlipperMotion::Climbing;
@@ -126,6 +127,8 @@ class Game {
     void returnFromBonus();
     int directionTo(int from, int to) const;
     void startFlipperTurn(Enemy &e);
+    void beginFlipperTurn(Enemy &e, int direction);
+    void openTanker(Enemy &e, std::vector<Enemy> &children);
     float flipRotation(const Enemy &e) const;
 
   public:
@@ -176,6 +179,9 @@ class Game {
     static Kind kindForSource(int type);
     static bool hostile(Kind kind);
     static bool flipperKind(Kind kind);
+    static bool flipperBody(const Enemy &e) {
+        return flipperKind(e.kind) || e.emerging;
+    }
     static bool shotVulnerable(const Enemy &e);
     bool isBonus() const {
         return mode == Mode::Bonus || (mode == Mode::Paused && pausedFrom == Mode::Bonus);
