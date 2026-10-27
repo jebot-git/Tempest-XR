@@ -30,12 +30,12 @@ These are actionable fidelity gaps, not defects proven absent by tests.
 | Area | Original behavior | Current behavior / gap |
 |---|---|---|
 | Flippers | `flipmodes` → `rail`, `flipto`, `stopped`; target-directed flips, rotation windows, pause counters, special rail/stop variants (11007–11559) | Corrected in the rim-combat follow-up: straight climb, target-directed rim turns, source orientation/rotation/pause data, wrapped 52-unit shot window, vacated-lane capture and continuous pivot animation. Impact order is independent of enemy storage order. Tanker-emergence submodes and the existing 24-second rim expiry remain adaptations. |
-| Super flippers / beasts | `make_sflip2/3`, `superflip`, `railopts`, `sstopmodes`, `beastrail` include different transformations, directed flip sequences and reflected shot forms | Shared rim turn/window behavior and mode-2 double rotation speed are corrected. HP, climbing speed multipliers and generic reflected bullets still approximate other states. Mode-3 down-web turns/reversed pursuit, directed multi-flip sequences and tanker super-flipper transformations remain incomplete. |
+| Super flippers / beasts | `make_sflip2/3`, `superflip`, `railopts`, `sstopmodes`, `beastrail` include different transformations, directed flip sequences and reflected shot forms | Shared rim turn/window behavior and mode-2 double rotation speed are corrected. Extra HP/reflected bullets on super flippers are incorrect: their ordinary source collision paths lead to `fkillme` after one valid hit. Beast staged reflection is distinct. Climbing speed multipliers and generic reflected bullets remain approximations. Mode-3 down-web turns/reversed pursuit, directed multi-flip sequences and tanker super-flipper transformations remain incomplete. |
 | Tankers | Three content dispatches, reservations of three object slots; open at top or on hit; paired sound 17 at pitch 60/61 (11620–11817) | Correct content families and pairs, but opening depth is .22 of the web instead of the source rim threshold. Generic kill sound and scoring path; slot reservations and some child states are absent. |
 | Spikers / spikes | `spiker_vex` chooses an empty lane or shortest existing spike, build/retreat counters, one-spiker capacity; spikes have independent geometry and optional super state (11844–12105) | Continuous growth, fixed retreat threshold, then adjacent-lane restart; generic 24-second expiry. No shortest-spike selection, source capacity/build counters or super spikes. Shot shortening amounts differ. |
 | Fuseballs | `fuse_vex` alternates rail climb and interpolated crossing; collision vulnerable only during particular crossing counts; player-seeking direction (12232–12413) | Player-seeking rail changes exist, but movement, crossing timing, vulnerability windows and geometry are simplified. |
 | Pulsars | Source 16-phase global counter, exact phase-7 lane hazard, independent `pulsar_zspeed`, two rim sparks (`run_pulsar`, 12463–12569) | Phase derived from an approximate duty interval; generic speed table path. Mesh/lighting pulse exists, but phase timing and collision do not match exactly. |
-| Rim sparks | `run_pspark`, 12575–12607: collision always active at matching depth/lane; bounce at open-web edges | Current sparks are dangerous only during pulse-active intervals and disappear at open edges. This is a known remaining gameplay bug. |
+| Rim sparks | `run_pspark`, 12575–12607: collision always active at matching depth/lane; bounce at open-web edges | Contact is already lethal between pulses because the generic rim-contact path also runs; the earlier audit claim of quiet-phase safety was incorrect. Sparks disappear instead of bouncing at open edges, and the global shot-first pass lets a same-tick shot prevent contact damage, unlike source `run_pspark`. |
 | Mirrors | `rumirr`, 12138–12164: four-count retry state, shot converted in place into ring/reflection, speed-specific knockback | Five-HP approximation, fixed knockback and generic EnemyShot. Reflection identities and exact shot interactions are lost. |
 | Hostile droid | `adroidmodes`: `admove`, `adgmove`, `zappage`, `uppweb` (10869) | Generic climber/rim mover with timed lane attack. Full four-state travel, zap and retreat behavior is absent. |
 | Friendly droid | `rundroid` uses nearest threat, 16-step movement and a separate shot budget, enlarged by `adenoid` | Nearest-enemy aiming exists; continuous steering and fixed fire delay replace source movement and budget. Lifecycle/deferred pickup is now corrected. |
@@ -48,6 +48,7 @@ These are actionable fidelity gaps, not defects proven absent by tests.
 | Scoring | Source `scores`/`doscore`, context-dependent `xbon`, transformations and start-level bonus | Fixed per-kind awards, flat 1,000 web-clear reward, 20,000 life thresholds. Not every source score context or starting-level award is ported. |
 | One Up / holiday | `do_oneup`, 12717 sets `holiday=50`; `gamefx` cycles web colors and ends the holiday | Life, original sample, bitmap and animation exist; source holiday/color state is not reproduced as a single state machine. |
 | Death / respawn | `ouch`, `zap_player`, `take_me_to_your_leader`, `snatch_it_away` and main game loop use source object/wave state and camera phases | A 1.6-second frozen scene followed by full same-wave restart. Original capture geometry is approximated; exact death phases and timers are not preserved. The same-wave restart is implemented independently of the source object/main-loop machinery. |
+| Wave-clear condition | `r_end` / `szoom`, 16290–16306: after generation ends, clearance begins when the furthest enemy is at the rim | Requires every hostile object to be gone. Rim flippers can delay clearance until their artificial 24-second expiry. The source furthest-enemy check is missing. |
 | Generation / capacity | `_nw` table budgets/periods, `setnewgen`/`newgen`; source object pools, `afree`, `noclog` and spiker restrictions | All 100 imported budgets and periods, initial half delays and final alias match data. 64-entity gate replaces capacity/backpressure rules, so actual encounter timing can differ. |
 | Web geometry / camera | Source raw web coordinates, perspective/orientation tables and level-dependent zoom speed | Original outline/topology/start lane and T2K order, recentered/scaled for meters; a tapered 9-meter web, wheel smoothing and fixed 14-meter/2.4-second clearance. |
 | Jump | Source accelerated depth trajectory and eligibility in `claw_con1`; disallows initiating during clearance | Fixed .85-second sine trajectory, three-second cooldown, and allows jumping during clearance. This supports the requested XR spike-clearing interaction. |
@@ -153,7 +154,7 @@ The 27 `solids` slots include no-op, flipper, three tankers, shot, fuseball, pul
 
 Regression tests exercise the corrected droid lifecycle/deferred grant, clearance-before-bonus order, bonus family boundaries, first-ring distance, ring/psycho completion award, continuous and pausable bonus return, automatic music selection after preview, failed-track retry, source PCM rate/pitch/loops, two/six channel limits and sample-only voices. All 24 prototype bonus courses are completed with public controls. This does not validate the absent tunnel rules or exact Jaguar AI.
 
-Priority order for further source fidelity: (1) remaining super/beast/tanker-emergence and hostile-droid states, (2) pulsar spark collision/edge behavior and exact pulse phases, (3) original tunnel track/trail/scoring, (4) source firing/capacity rules and spiker selection, (5) score contexts/rare pickups/one-up state, (6) remaining individual effects, music fade and frontend variants. Replacing these with faithful state transitions requires dedicated regressions; it cannot be established by existing roster and rendering tests alone.
+Priority order for further source fidelity: (1) wave-clear trigger, super-flipper damage and rim-spark contact/bounce bugs, (2) original tunnel track/trail/scoring, (3) remaining enemy state machines and firing/capacity rules, (4) score contexts/rare pickups/one-up state, (5) individual effects, music fade and frontend flows. The re-evaluation below records concrete reproductions and corrects an earlier spark finding. Replacing these with faithful state transitions requires dedicated regressions; it cannot be established by existing roster and rendering tests alone.
 
 ## Rim-combat follow-up
 
@@ -181,3 +182,42 @@ not reproduced. Collision windows use the imported source orientation words
 rather than approximating their values from modern geometry. The impact solver
 is a swept modern implementation rather than the source linked-list update
 order; it intentionally removes storage-order-dependent shot stealing.
+
+## Remaining-implementation re-evaluation at f147c02
+
+The eight CTest suites still pass. A separate controlled gameplay probe reproduced
+the following missing or incorrect source behaviors. No gameplay code was changed
+during this evaluation. Observed values use the public Game state and fixed
+120 Hz ticks; they are not observations from a Jaguar emulator.
+
+| Priority | Gap / reproduction | Observed current behavior | Source-required behavior / next implementation |
+|---|---|---|---|
+| P1 | Generation finished, sole flipper already at rim, player protected for observation | Remains Playing; clearance begins after **24.0083 s**, when the flipper expires | `r_end` compares the furthest counted enemy with `webz-80`, then calls `szoom`. Implement the depth-based clearance trigger and remove expiry as a substitute. Current condition: `src/game.cpp:1136`. |
+| P1 | One valid normal hit on a climbing `SuperFlipper` / `SuperFlipper2` | Enemy survives with HP 1 / 2 and creates an EnemyShot | `railopts` selects `stdrail`; its collision path, `flipcollie` and `stdstop` branch to `fkillme` after one valid hit (11083–11085, 11137–11146, 11292–11294). Implement super movement variants without invented shield HP/ricochet. Keep beast/mirror reflection as separate source rules. Current hit handling: `src/game.cpp:1049`. |
+| P1 | Spark reaches an open-web end | Spark count becomes zero | `run_pspark` reverses direction and continues inward. Preserve the spark and implement the source propagation counter. Current edge branch: `src/game.cpp:916`. |
+| P1 | Spark and player share rim lane while a fresh shot is fired | Player keeps all three lives; spark dies for +200 | `run_pspark` checks `checlane` before `collie`. Contact must win here, unlike the stopped-flipper shot-before-capture rule. Current global impact pass precedes spark contact: `src/game.cpp:1093`. |
+| P1 | Unshot tanker at depth .22, still well below rim | Tanker opens into two flippers | `run_tanker` opens on a valid hit or at `webz-80`. Move the automatic opening threshold to the rim and port child-entry states / source sound pair. Current threshold: `src/game.cpp:1100`. |
+| P1 | Tunnel bonus rules | Radial opening targets, immediate failure on miss, fixed per-opening awards | Implement `_tunn` / `tunrun` / `tundraw`: green track, trail growth/loss, recoverable off-track tolerance, continuous scoring, rotating segmented walls and source difficulty progression. Imported turn bytes alone do not implement this game. |
+| P1 | Enemy behavior completeness | Basic rim flippers now have their correct shared movement/window states; other families still share simplified generic fields | Port hostile-droid four-state AI, spiker lane/build selection and super spikes, fuseball crossing states/windows, exact pulsar phases, mode-3 down-web turns, tanker-emergence chains and beast/mirror projectile transformations. |
+| P2 | Combat budgets and progression balance | Per-enemy firing timers, 64-entity gate, generic reflected EnemyShot, fixed player/droid cadence | Source object/shot pools, global alien firing counter, subtype limits, distinct reflected-shot speed/interception and source spawn backpressure are absent. |
+| P2 | Score / pickup / ending flows | Fixed per-kind scores and web-clear reward, fixed point pickups, modern wave-100 victory | Port source score contexts, selected-start-level awards, rare surprise/infinite-zap/early-exit branch, one-up color state, exact bonus result flow and source completion/Beastly handoff. |
+| P2 | Special-effect/audio completeness | Original art/meshes/PCM and modern feedback are present | Source firework command sequence, tunnel pattern/trail generators, bonus victory presentation and remaining per-effect lifecycles/color timing are incomplete. Music still lacks the 50-frame fade-down/wait; several explosion/impact contexts share a generic cue. |
+| P3 | Original frontend and optional modes | Modern title, best score, unlocked web and preferences | Attract/tutorial/credits cycle, initials/high-score table, keys/passwords, full original options, permanent droid-start option, Classic/Plus/co-op/H2H are absent. XR controller bindings and physical headset/WiVRn validation are also outstanding; wheel-based XR is implemented. |
+
+**Corrected audit finding:** the quiet-phase spark probe reports `pulse=0`,
+`lives=2`, spark still present. Thus contact lethality outside pulses already
+works. The remaining spark failures are edge handling, source contact priority
+and exact propagation/pulse integration.
+
+**Test-coverage gap:** `tests/campaign-test.cpp:190` currently groups super
+flippers with mirrors and asserts survival plus a reflected bullet. That test
+protects the prototype's incorrect super-flipper behavior and must change with
+the fix. Campaign budget tests erase generated enemies, so they do not test the
+source rim-based wave-clear condition. Completing all 24 prototype bonus
+courses does not validate the missing original tunnel trail/track rules.
+
+The labeled `raw_webs` table was checked against the generated web-order array;
+it matches. The different table embedded earlier under `romstart` is not the
+labeled runtime table used by `sweb`. Original sample-only audio, full-sphere
+XR stars, ship-following camera and the repaired basic rim timing are already
+present and are not counted as missing implementations.

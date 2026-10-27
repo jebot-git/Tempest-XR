@@ -84,3 +84,11 @@ equivalence. The [behavior audit](BEHAVIOR_AUDIT.md) catalogs all 41 update
 dispatch slots and the remaining AI, collision, tunnel, scoring, frontend and
 effect differences. In particular, the 24-course completion test exercises the
 prototype tunnel rules, which differ from the original green-track/trail game.
+
+A subsequent evaluation at `f147c02` reproduced outstanding wave-clear,
+super-flipper damage, spark edge/contact-order and tanker-opening gaps despite
+all eight suites passing. The [re-evaluation](BEHAVIOR_AUDIT.md#remaining-implementation-re-evaluation-at-f147c02)
+records the source expectations and identifies a campaign assertion which
+currently enforces the incorrect super-flipper behavior. Quiet-phase spark
+contact lethality was checked and works; the earlier contrary audit statement
+was corrected.
