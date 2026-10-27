@@ -73,6 +73,7 @@ void Game::start(int startingLevel) {
     zapTime = 0;
     jumpTime = 0;
     jumpCooldown = 0;
+    deathTime = oneUpTime = 0;
     bonusTokens = 0;
     bonusesPlayed = 0;
     bonusRuns.fill(0);
@@ -109,6 +110,8 @@ int Game::directionTo(int from, int to) const {
     return d == 0 ? 0 : d > 0 ? 1 : -1;
 }
 void Game::steer(float notches) {
+    if (deathTime > 0)
+        return;
     if (mode == Mode::Menu) {
         wheelRemainder += notches;
         int steps = int(wheelRemainder);
@@ -129,7 +132,8 @@ void Game::steer(float notches) {
     lane = boundedLane(lane + steps);
 }
 void Game::jump() {
-    if ((mode == Mode::Playing || mode == Mode::Transition) && jumpEnabled && jumpCooldown <= 0) {
+    if (deathTime <= 0 && (mode == Mode::Playing || mode == Mode::Transition) && jumpEnabled &&
+        jumpCooldown <= 0) {
         jumpTime = .85f;
         jumpCooldown = 3.f;
         sounds.push_back(Sound::Jump);
@@ -161,6 +165,11 @@ Vec3 Game::enemyPosition(const Enemy &e) const {
     return e.kind == Kind::Fuseball ? edge(e.lane + 1, e.depth) : position(float(e.lane), e.depth);
 }
 Vec3 Game::shipPosition() const {
+    if (deathTime > 0) {
+        float t = deathProgress(), blend = t * t * (3 - 2 * t);
+        return deathShip * (1 - blend) + respawnShip * blend +
+               Vec3{0, 0, std::sin(t * 3.14159265f) * .8f};
+    }
     if (mode == Mode::GameOver)
         return deathShip;
     if (isBonus()) {
@@ -196,6 +205,7 @@ void Game::addScore(int points) {
         lives++;
         nextLife += 20000;
         sounds.push_back(Sound::OneUp);
+        oneUpTime = 1.8f;
     }
     best = std::max(best, score);
 }
@@ -277,28 +287,34 @@ void Game::destroy(Enemy &e, bool zap) {
         }
     }
 }
-void Game::hit() {
-    if (invulnerable > 0 || jumpTime > 0)
+void Game::hit(bool snatch) {
+    if (invulnerable > 0 || jumpTime > 0 || deathTime > 0)
         return;
+    deathShip = shipPosition();
+    respawnShip = position(float(std::clamp(web.start, 0, web.lanes() - 1)), 0);
+    snatched = snatch;
     lives--;
     invulnerable = 2.4f;
     flash = .55f;
-    burst(shipPosition(), 3, 220);
-    announce("OUCH");
-    sounds.push_back(Sound::Hit);
+    if (!snatched)
+        burst(deathShip, 3, 220);
+    announce(snatched ? "GOT YOU" : "OUCH");
+    sounds.push_back(snatched ? Sound::Snatch : Sound::Hit);
     droidActive = false;
     boost = false;
     jumpEnabled = false;
     powerupStage = 0;
     killsToPowerup = 1;
+    fireHeld = false;
+    deathTime = deathDuration;
     if (lives <= 0) {
-        deathShip = shipPosition();
+        respawnShip = deathShip + Vec3{0, 0, .8f};
         mode = Mode::GameOver;
         best = std::max(best, score);
     }
 }
 void Game::zap() {
-    if (mode != Mode::Playing || zaps <= 0)
+    if (mode != Mode::Playing || zaps <= 0 || deathTime > 0)
         return;
     bool full = zaps == 2;
     zaps--;
@@ -508,7 +524,8 @@ void Game::tickBonus(float dt) {
             ++bonusBoosts;
             bonusEffectTime = 1;
             announce("SPEED BOOST", 1);
-        }
+        } else if (effect == 0)
+            announce(std::to_string(bonusLastScore), 1.1f);
         sounds.push_back(bonusBoosts % 2 ? Sound::GateYes : Sound::GateYesAlt);
         bonusHits++;
         bonusGate++;
@@ -528,6 +545,7 @@ void Game::tick(float dt) {
     flash = std::max(0.f, flash - dt);
     zapTime = std::max(0.f, zapTime - dt);
     messageTime = std::max(0.f, messageTime - dt);
+    oneUpTime = std::max(0.f, oneUpTime - dt);
     for (auto &p : particles) {
         p.life -= dt;
         p.pos = p.pos + p.velocity * dt;
@@ -535,6 +553,20 @@ void Game::tick(float dt) {
     particles.erase(
         std::remove_if(particles.begin(), particles.end(), [](auto &p) { return p.life <= 0; }),
         particles.end());
+    if (deathTime > 0) {
+        deathTime = std::max(0.f, deathTime - dt);
+        if (deathTime == 0) {
+            if (lives > 0) {
+                loadWeb();
+                mode = Mode::Playing;
+                invulnerable = 1.5f;
+                announce("SUPERZAPPER RECHARGE");
+                sounds.push_back(Sound::Wave);
+            } else
+                deathShip = respawnShip;
+        }
+        return;
+    }
     float diff = float(lane) - visualLane, n = float(web.lanes());
     if (web.closed) {
         if (diff > n / 2)
@@ -568,7 +600,7 @@ void Game::tick(float dt) {
         float depth = warpDistance() / 9;
         if (depth >= spikes[size_t(lane)] && depth <= 1 && spikes[size_t(lane)] < .99f)
             hit();
-        if (mode == Mode::GameOver)
+        if (mode == Mode::GameOver || deathTime > 0)
             return;
         if (transitionTimer <= 0) {
             level = targetLevel;
@@ -786,8 +818,11 @@ void Game::tick(float dt) {
                 e.dead = true;
                 continue;
             }
-            if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane))
-                hit();
+            if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane)) {
+                hit(flipper);
+                if (flipper && deathTime > 0 && snatched)
+                    e.dead = true;
+            }
             if (e.age > 24)
                 e.dead = true;
         }
@@ -812,7 +847,7 @@ void Game::tick(float dt) {
                 shots.end());
     bool remaining =
         std::any_of(enemies.begin(), enemies.end(), [](auto &e) { return hostile(e.kind); });
-    if (mode == Mode::Playing && enemiesRemaining <= 0 && !remaining)
+    if (mode == Mode::Playing && deathTime <= 0 && enemiesRemaining <= 0 && !remaining)
         completeWave();
 }
 } // namespace tempest

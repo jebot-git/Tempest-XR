@@ -108,6 +108,53 @@ int main() {
         g.tick(.02f);
         CHECK(count(g, Kind::EnemyShot) == 1);
         CHECK(g.shots.size() == 1);
+        // Capture/explosion sequences freeze combat, pause, and smoothly rejoin
+        // the starting rim of the same wave without spending a second life.
+        for (auto kind : {Kind::Flipper, Kind::EnemyShot}) {
+            g.start();
+            g.autoFire = false;
+            g.invulnerable = 0;
+            g.steer(3);
+            step(g, .3f);
+            auto before = g.xrCameraPosition();
+            g.spawn(kind, g.lane, .0001f);
+            g.tick(1.f / 120);
+            CHECK(g.lives == 2 && g.deathTime > 0);
+            CHECK(g.snatched == (kind == Kind::Flipper));
+            CHECK(std::hypot(g.xrCameraPosition().x - before.x, g.xrCameraPosition().y - before.y) <
+                  .03f);
+            int remaining = g.enemiesRemaining;
+            g.pause();
+            float countdown = g.deathTime;
+            step(g, .4f);
+            CHECK(g.deathTime == countdown);
+            g.pause();
+            while (g.deathTime > 0) {
+                before = g.xrCameraPosition();
+                g.tick(1.f / 120);
+                auto now = g.xrCameraPosition();
+                CHECK(std::hypot(now.x - before.x, now.y - before.y) < .06f);
+                CHECK(std::abs(now.z - before.z) < .06f);
+                if (g.deathTime > 0)
+                    CHECK(g.enemiesRemaining == remaining);
+            }
+            CHECK(g.mode == Mode::Playing && g.level == 1 && g.lives == 2);
+            CHECK(g.enemiesRemaining == g.waveSize && g.zaps == 2 && g.invulnerable > 1);
+            CHECK(!g.jumpEnabled && !g.boost && !g.droidActive);
+        }
+        g.start();
+        g.autoFire = false;
+        g.invulnerable = 0;
+        g.lives = 1;
+        g.spawn(Kind::EnemyShot, g.lane, .0001f);
+        g.tick(1.f / 120);
+        CHECK(g.mode == Mode::GameOver);
+        while (g.deathTime > 0) {
+            auto before = g.xrCameraPosition();
+            g.tick(1.f / 120);
+            CHECK(std::abs(g.xrCameraPosition().z - before.z) < .06f);
+        }
+        CHECK(g.mode == Mode::GameOver && g.lives == 0);
         // Tanker variants must release the corresponding two contents.
         for (auto pair :
              {std::pair{Kind::Tanker, Kind::Flipper}, std::pair{Kind::FuseTanker, Kind::Fuseball},

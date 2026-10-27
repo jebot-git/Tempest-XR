@@ -41,13 +41,13 @@ struct XR::Impl {
     float yaw = 0;
     std::string runtime;
     uint64_t frames = 0, stereoFrames = 0;
-    uint64_t warpFrames = 0, jumpFrames = 0;
+    uint64_t warpFrames = 0, jumpFrames = 0, deathFrames = 0;
     float maxWarpDistance = 0;
     ~Impl() {
         if (instance)
             std::cerr << "OpenXR frames=" << frames << " stereo_frames=" << stereoFrames
                       << " warp_frames=" << warpFrames << " max_warp_distance=" << maxWarpDistance
-                      << " jump_frames=" << jumpFrames << '\n';
+                      << " jump_frames=" << jumpFrames << " death_frames=" << deathFrames << '\n';
         if (fbo)
             glDeleteFramebuffers(1, &fbo);
         for (auto &e : eyes) {
@@ -288,6 +288,8 @@ bool XR::frame(Renderer &renderer, const Game &game) {
             x.warpFrames++;
         if (game.jumpTime > 0)
             x.jumpFrames++;
+        if (game.deathTime > 0)
+            x.deathFrames++;
         x.maxWarpDistance = std::max(x.maxWarpDistance, game.warpDistance());
         if (!x.hasAnchor) {
             x.anchor = {(views[0].pose.position.x + views[1].pose.position.x) * .5f,
@@ -361,7 +363,9 @@ bool XR::frame(Renderer &renderer, const Game &game) {
         x.stereoFrames++;
     return true;
 }
-void XR::setVisible(bool visible) { p->visible=visible; }
+void XR::setVisible(bool visible) {
+    p->visible = visible;
+}
 void XR::recenter() {
     p->hasAnchor = false;
 }

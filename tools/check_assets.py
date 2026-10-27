@@ -20,3 +20,16 @@ for sample in effects['samples']:
     raw=bytes((x//256)&255 for x in values)
     assert hashlib.sha256(raw).hexdigest()==sample['raw_sha256'],sample['file']
 print('Seven original modules and 30 losslessly converted original sample payloads verified')
+
+art=json.loads((root/'art/manifest.json').read_text())
+assert len(art['atlases'])==5 and len(art['fonts'])==3
+for atlas in art['atlases']:
+    data=(root/'art'/atlas['file']).read_bytes()
+    assert hashlib.sha256(data).hexdigest()==atlas['sha256'],atlas['file']
+    assert data[:2]==b'BM'
+    width,height=struct.unpack_from('<ii',data,18)
+    assert width==atlas['width']==320 and height==-atlas['height'] and atlas['height'] in (128,200)
+    assert struct.unpack_from('<I',data,66)[0]==0xff000000
+    offset=struct.unpack_from('<I',data,10)[0]
+    assert set(data[offset+3::4]) <= {0,255} and 255 in data[offset+3::4]
+print('Five original CRY atlases and three font maps verified')

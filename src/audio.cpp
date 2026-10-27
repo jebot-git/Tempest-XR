@@ -1,4 +1,5 @@
 #include "audio.hpp"
+#include "sample_data.hpp"
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -63,7 +64,7 @@ static int effectSample(Sound sound) {
     case Sound::Kill:
         return 16;
     case Sound::Hit:
-        return 3;
+        return 10;
     case Sound::Jump:
         return 6;
     case Sound::Zap:
@@ -88,6 +89,8 @@ static int effectSample(Sound sound) {
         return 26;
     case Sound::GateYesAlt:
         return 27;
+    case Sound::Snatch:
+        return 25;
     }
     return -1;
 }
@@ -102,36 +105,106 @@ void Audio::play(Sound sound) {
     if (!device)
         return;
     SDL_LockAudioDevice(device);
-    for (auto &v : voices)
-        if (v.remaining <= 0) {
-            float length = sound == Sound::Shot   ? .045f
-                           : sound == Sound::Zap  ? .6f
-                           : sound == Sound::Wave ? .55f
-                           : sound == Sound::Warp ? 2.4f
-                                                  : .18f;
-            v = {0, length, length, sound};
-            int sample = effectSample(sound);
-            if (sample >= 0 && !effectSamples[size_t(sample)].empty()) {
-                v.sample = sample;
-                v.remaining = float(effectSamples[size_t(sample)].size()) / (48000 * 2);
-                v.duration = v.remaining;
-            }
-            break;
-        }
-    SDL_UnlockAudioDevice(device);
-    if (sound == Sound::Warp) {
-        SDL_LockAudioDevice(device);
-        for (auto &v : voices)
-            if (v.remaining <= 0 && !effectSamples[23].empty()) {
-                v = {};
-                v.sound = Sound::Warp;
-                v.sample = 23;
-                v.remaining = float(effectSamples[23].size()) / (48000 * 2);
-                v.duration = v.remaining;
-                break;
-            }
-        SDL_UnlockAudioDevice(device);
+    int sample = effectSample(sound);
+    int priority = sample >= 0 ? sourceSamples[size_t(sample)].priority : 1;
+    switch (sound) {
+    case Sound::Shot:
+    case Sound::PoweredShot:
+        priority = 1;
+        break;
+    case Sound::Kill:
+    case Sound::Ricochet:
+        priority = 2;
+        break;
+    case Sound::Zap:
+    case Sound::Pulse:
+        priority = 10;
+        break;
+    case Sound::Pickup:
+        priority = 3;
+        break;
+    case Sound::Hit:
+        priority = 50;
+        break;
+    case Sound::Wave:
+        priority = 101;
+        break;
+    case Sound::Warp:
+        priority = 400;
+        break;
+    case Sound::GateYes:
+    case Sound::GateYesAlt:
+        priority = 100;
+        break;
+    case Sound::Excellent:
+        priority = 101;
+        break;
+    case Sound::OneUp:
+        priority = 3;
+        break;
+    case Sound::Snatch:
+        priority = 101;
+        break;
+    default:
+        break;
     }
+    auto queue = [&](int which, float period, float pan, float gain, float delay = 0.f) {
+        auto *voice =
+            &*std::min_element(voices.begin(), voices.end(), [](const auto &a, const auto &b) {
+                if ((a.remaining <= 0) != (b.remaining <= 0))
+                    return a.remaining <= 0;
+                return a.priority == b.priority ? a.serial < b.serial : a.priority < b.priority;
+            });
+        if (voice->remaining > 0 && voice->priority > priority)
+            return;
+        float length = sound == Sound::Shot   ? .045f
+                       : sound == Sound::Zap  ? .6f
+                       : sound == Sound::Wave ? .55f
+                       : sound == Sound::Warp ? 2.4f
+                                              : .18f;
+        *voice = {};
+        voice->sound = sound;
+        voice->serial = ++voiceSerial;
+        voice->priority = priority;
+        voice->pan = pan;
+        voice->gain = gain;
+        voice->delay = delay;
+        if (which >= 0 && !effectSamples[size_t(which)].empty()) {
+            voice->sample = which;
+            voice->step = period > 0 ? float(sourceSamples[size_t(which)].period) / period : 1;
+            length = float(effectSamples[size_t(which)].size()) / (48000 * 2 * voice->step);
+        }
+        voice->duration = voice->remaining = length;
+    };
+    if (sound == Sound::Excellent) {
+        // sayex issues two PLAYFX2 calls with periods $160 and $162.
+        queue(sample, 352, -.25f, .65f);
+        queue(sample, 354, .25f, .65f);
+    } else if (sound == Sound::Hit) {
+        queue(sample, 200, -.25f, .65f);
+        queue(sample, 196, .25f, .65f);
+    } else if (sound == Sound::Wave) {
+        queue(sample, 0, -.2f, .65f);
+        queue(sample, 0, .2f, .65f);
+    } else if (sound == Sound::Warp) {
+        queue(sample, 500, -.2f, .65f);
+        queue(sample, 500, .2f, .65f);
+        priority = 101;
+        queue(23, 512, -.2f, .65f);
+        queue(23, 512, .2f, .65f);
+    } else if (sound == Sound::GateYes || sound == Sound::GateYesAlt) {
+        queue(sample, float(gatePeriod), -.2f, .65f);
+        queue(sample, float(gatePeriod), .2f, .65f);
+    } else if (sound == Sound::Kill) {
+        // killme randomizes sfx_pitch over the original 128..383 period range.
+        random = random * 1664525u + 1013904223u;
+        queue(sample, float(128 + (random & 255)), 0, 1);
+    } else if (sound == Sound::OneUp) {
+        queue(sample, 512, -.25f, .8f);
+        queue(sample, 514, .25f, .5f, .08f);
+    } else
+        queue(sample, 0, 0, 1);
+    SDL_UnlockAudioDevice(device);
 }
 void Audio::setMusicDirectory(const std::string &directory) {
     musicDirectory = directory;
@@ -163,6 +236,10 @@ void Audio::updateMusic(const Game &game, bool suspended) {
                 voice.remaining = 0;
         audioMode = game.mode;
     }
+    gatePeriod = 512 + game.bonusBoosts * 5;
+    for (auto &voice : voices)
+        if (voice.remaining > 0 && voice.sound == Sound::Warp && voice.sample == 9)
+            voice.step = float(sourceSamples[9].period) / (500 - 350 * game.transitionDepth());
     this->suspended = suspended || game.mode == Mode::Paused;
     music.pause(suspended || game.mode == Mode::Paused);
     SDL_UnlockAudioDevice(device);
@@ -184,12 +261,21 @@ void Audio::callback(void *self, Uint8 *stream, int size) {
         float mixed = 0, left = 0, right = 0;
         for (auto &v : audio.voices)
             if (v.remaining > 0) {
+                if (v.delay > 0) {
+                    v.delay -= 1.f / 48000;
+                    continue;
+                }
                 if (v.sample >= 0) {
-                    auto &samples = audio.effectSamples[size_t(v.sample)];
-                    if (v.position + 1 < samples.size()) {
-                        left += samples[v.position] * .3f;
-                        right += samples[v.position + 1] * .3f;
-                        v.position += 2;
+                    const auto &pcm = audio.effectSamples[size_t(v.sample)];
+                    size_t frame = size_t(v.position), next = frame + 1;
+                    float blend = float(v.position - double(frame));
+                    if (frame * 2 + 1 < pcm.size()) {
+                        next = std::min(next, pcm.size() / 2 - 1);
+                        float l = pcm[frame * 2] * (1 - blend) + pcm[next * 2] * blend;
+                        float r = pcm[frame * 2 + 1] * (1 - blend) + pcm[next * 2 + 1] * blend;
+                        left += l * .3f * v.gain * (v.pan > 0 ? 1 - v.pan : 1);
+                        right += r * .3f * v.gain * (v.pan < 0 ? 1 + v.pan : 1);
+                        v.position += v.step;
                     } else
                         v.remaining = 0;
                     v.remaining -= 1.f / 48000;
@@ -236,6 +322,7 @@ void Audio::callback(void *self, Uint8 *stream, int size) {
                     break;
                 case Sound::GateYes:
                 case Sound::GateYesAlt:
+                case Sound::Snatch:
                     freq = 600 + 400 * (1 - u);
                     break;
                 }

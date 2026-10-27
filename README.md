@@ -2,7 +2,7 @@
 
 A source-informed **Tempest 2000** recreation for Linux desktop and native
 OpenXR, with mouse-wheel controls, a ship-following XR camera, the original
-Jaguar music and sound samples, original shaded meshes, and a 100-wave campaign.
+Jaguar music and sound samples, original shaded meshes and raster artwork/fonts, and a 100-wave campaign.
 
 Reference: [Jeff Minter's Jaguar source, preserved by mwenge](https://github.com/mwenge/tempest2k),
 pinned to `8b50b467ce7dd7eee475aaf5ae86804d95401ae7`. This is a native C++17,
@@ -79,11 +79,19 @@ Powerups progress through **particle laser → points → jump → points → fr
 droid → bonus token**, followed by additional point awards. The first killed
 enemy offers a pickup; subsequent drops use the imported per-wave kill delay.
 Three tokens earn a bonus at wave clearance. Ring, tunnel and psychedelic
-families use the original course layouts/order. Successful bonuses award points
-and warp five levels, with the source's late-campaign limit on skipping. Failing
-a bonus costs no life.
+families use the original course layouts/order. Packed gate delays control spacing;
+up/down gates impart a vertical impulse, lightning gates increase speed by one
+eighth, and pyramid gates finish the course. Ring accuracy awards 250/500/750
+points using the source scoring rule. Psycho mode keeps its source delay override
+and scoring rule. Successful bonuses warp five levels, with the source's
+late-campaign limit on skipping. Failing a bonus costs no life.
 
-Jump lasts 0.85 seconds with a three-second recharge. Death removes upgrades.
+Jump lasts 0.85 seconds with a three-second recharge. Enemy bullets can be
+intercepted with normal, particle-laser or friendly-droid fire. Death removes
+upgrades, freezes combat for a 1.6-second explosion/capture sequence, and restarts
+the current wave with brief protection. The camera glides back to its starting
+rim. A flipper capture carries the claw down the tunnel; other deaths scatter
+its original polygon faces.
 Spikes survive Superzapper, block shots, and remain hazardous throughout the
 ship's passage along them during clearance. Every 20,000 points awards a life,
 including thresholds crossed by wave/bonus awards. An airborne jump continues
@@ -108,7 +116,10 @@ jumps move it backward by up to 0.8 meters, and clearance flies it 14 meters
 through the tunnel over 2.4 seconds. The next web is rendered beyond the old
 one; the flight joins its starting lane before resetting the world origin.
 OpenXR predicted eye poses/FOVs remain layered onto the moving rig. A full-sphere
-background fills every head direction, with animated ring/sine patterns.
+background fills every head direction, with animated ring/sine patterns and warp
+streaks. Bonus entry, bonus exit and the next-web reset preserve camera continuity.
+The headset HUD shows zaps, jump readiness/recharge, tokens, upgrades, bonus
+progress/speed, pause/resume instructions and campaign victory.
 
 In DomeD, the validated launch socket determines the default mode: launch from
 XR to enter native OpenXR immediately, or from desktop for desktop play.
@@ -129,7 +140,8 @@ as part of installation.
 Outside DomeD, ordinary desktop and explicit `--xr` modes remain available.
 XR controller bindings are not implemented. The desktop companion shows an
 overview; B selects a stereo camera preview. Runtime loss returns to desktop and
-pauses. Wayland uses
+pauses. Runtime exceptions release mouse capture and the DomeD lease through
+the same cleanup path as a normal XR exit. Wayland uses
 EGL plus `XR_MNDX_egl_enable`; X11 can use GLX. Missing runtime/headset support
 leaves desktop play available and prints the reason.
 
@@ -139,12 +151,20 @@ The seven original Jaguar `.mod` files are in `assets/music/`. Title, gameplay
 16-wave blocks and bonus music use the original selection. Thirty original
 sample payloads are converted losslessly to WAV for shots, explosions, jumps,
 zaps, powered fire, ricochets and voice announcements. Sample playback uses
-period-derived nominal rates. Missing files use synthesized fallback.
+period-derived nominal rates. Metadata-derived periods and priorities feed a voice-stealing mixer.
+Explosion pitch varies over the source range; the original dual-voice periods
+are used for death and Excellent, with paired recharge, warp and gate cues.
+Gate boosts change voice pitch and warp flight ramps its sound. A short stereo
+one-up echo is added by the modern mixer. Missing files use synthesized fallback.
 
 Original `obj2d.s` face lists and vertex intensities supply 37 shaded/animated
-meshes, including the ship frames. Effects include colored explosions, particle
-text breakup, Superzapper arcs, lane pulses, rainbow beam rings, ship trails,
-animated starfields, warp bridges/rings and a scrolling psychedelic bonus floor.
+meshes, including animated beast, tanker and jump frames. Five original CRY
+sprite sheets are decoded using the Atari hardware color tables. All three
+96-character Joby font maps are imported. The title logo, score graphics, 2000
+points, One Up and Game Over use source pixels; announcements shatter those
+pixels and font glyphs into the scene. Ring/psychedelic floors use the original
+swirly background texture. Effects also include colored explosions, Superzapper
+arcs, lane pulses, rainbow beam rings, ship trails and warp bridges/rings.
 Melt-o-vision-style scale/rotate/intensity feedback keeps independent histories
 for both XR eyes, SBS eyes and the desktop.
 
@@ -152,11 +172,12 @@ for both XR eyes, SBS eyes and the desktop.
 ./build/tempest-xr --enemy-demo
 ./build/tempest-xr --bonus-demo 0       # 0 rings / 1 tunnel / 2 psychedelic
 ./build/tempest-xr --stereo --effects-demo
+./build/tempest-xr --death-demo 0       # 0 explosion / 1 flipper capture
 ./build/tempest-xr --no-music          # Keep effects
 ./build/tempest-xr --music-dir /path/to/modules
 ```
 
-`TEMPEST_MUSIC_DIR` / `TEMPEST_EFFECTS_DIR` override asset directories. Installed
+`TEMPEST_MUSIC_DIR`, `TEMPEST_EFFECTS_DIR` and `TEMPEST_ART_DIR` override asset directories. Installed
 assets live under `PREFIX/share/tempest-xr/`. Fetch/import tools pin the source
 commit and record URLs/checksums; see [source notes](docs/SOURCE_NOTES.md) and
 [third-party notices](THIRD_PARTY_NOTICES.md).
@@ -173,12 +194,16 @@ python3 tools/test_xr.py              # Optional Monado simulated HMD + compatib
 
 Tests cover the three audited regressions, enemy behaviors, all 100 generation
 budgets, powerup/droid progression, both zaps, bonus success/failure and victory.
-Render checks cover sky directions, mesh data, enemies, bonus modes and effects.
-Asset checks verify module bytes and lossless conversion of the sample payloads.
+Tests complete all 24 bonus courses using public wheel/button controls, and
+verify projectile interception, continuous bonus boundaries and death/respawn.
+Render checks cover sky directions, source art/fonts, mesh animation, XR HUD
+states, bonus modes and effects. Mixer tests cover pitch, stereo pairs, echo,
+priority stealing and pause. Asset checks verify module/sample/art hashes.
 Recorded results are in [validation](docs/VALIDATION.md).
 The native XR fixture uses a private runtime directory and leaves the system
 runtime unchanged. It exercises effects/late-jump warp, enemy roster and all
-three bonus families in actual OpenXR sessions.
+three bonus families, explosion and capture in actual OpenXR sessions. A separate
+CTest injects an OpenXR runtime failure and checks capture release before exit.
 
 DomeD handoff integration can be tested without connecting to a real headset:
 
@@ -188,7 +213,8 @@ python3 tools/test_domed.py --compositor ../DomeD/target/release/dome-compositor
 
 This runs the real game in a private Wayland compositor with a test-only OpenXR
 API runtime. It verifies launch modes, physical wheel capture, pause/restoration,
-returning to XR, desktop toggling, client death and stopped-thread expiry.
+returning to XR, desktop toggling, client death, stopped-thread expiry and runtime
+failure recovery. It requires an upstream DomeD build with the native handoff API.
 `--report diagnostics.json` writes aggregate launch/pause/input/render results;
 it does not log keys or lease tokens.
 
@@ -197,7 +223,8 @@ Useful flags: `--desktop`, `--level 1..100`, `--demo` (autoplay), `--frames N`,
 streaming performance and comfort still require target-device validation.
 
 This remains a source-informed recreation: enemy AI, projectile limits, bonus
-cadence, camera motion, modern RGB colors and effects are adapted rather than
-cycle/pixel-identical Jaguar emulation. Original Classic/Plus/two-player modes,
-EEPROM key algorithms and the original raster art/font pipeline remain outside
-this implementation.
+inertia, camera motion, modern RGB polygon shading and mixing are adapted rather
+than cycle/pixel-identical Jaguar emulation. The original gate layout, delay and
+modifier data drive the bonus implementation, with a short initial XR approach.
+Original Classic/Plus/two-player and Beastly modes, the full high-score table and
+EEPROM key algorithms remain outside this implementation.

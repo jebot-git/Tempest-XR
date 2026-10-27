@@ -53,7 +53,8 @@ enum class Sound {
     Pulse,
     Ricochet,
     GateYes,
-    GateYesAlt
+    GateYesAlt,
+    Snatch
 };
 struct Enemy {
     Kind kind;
@@ -92,6 +93,7 @@ class Game {
     Mode pausedFrom = Mode::Playing;
     Vec3 nextSpawn;
     Vec3 deathShip;
+    Vec3 respawnShip;
     Vec3 transitionOffset, bonusEntryOffset;
     std::vector<float> spawnTimers;
     std::vector<Enemy> pending;
@@ -101,7 +103,7 @@ class Game {
     bool lastPulse = false;
     float randf(float lo, float hi);
     void loadWeb();
-    void hit();
+    void hit(bool snatch = false);
     void destroy(Enemy &e, bool zap = false);
     void announce(const std::string &text, float seconds = 1.6f);
     void collectPowerup();
@@ -125,6 +127,15 @@ class Game {
     float droidLane = 0, bonusTime = 0, bonusX = 0, bonusY = 0, bonusAngle = 0;
     float bonusDistance = 0, bonusSpeed = 30, bonusImpulse = 0, bonusEffectTime = 0;
     int bonusBoosts = 0, bonusLastScore = 0;
+    float deathTime = 0, oneUpTime = 0;
+    bool snatched = false;
+    static constexpr float deathDuration = 1.6f;
+    float deathProgress() const {
+        return deathTime > 0 ? 1 - deathTime / deathDuration : 1;
+    }
+    Vec3 deathOrigin() const {
+        return deathShip;
+    }
     float zapTime = 0, messageTime = 0, messageDuration = 1;
     std::string message;
     std::vector<Enemy> enemies;

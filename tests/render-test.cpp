@@ -1,4 +1,5 @@
 #include "meshes.hpp"
+#include "raster_data.hpp"
 #include "render.hpp"
 #include <SDL.h>
 #include <SDL_opengl.h>
@@ -24,6 +25,11 @@ int main() {
         if (!context)
             throw std::runtime_error(SDL_GetError());
         Renderer renderer;
+        if (!Renderer::originalArtAvailable())
+            throw std::runtime_error("Missing original CRY atlases");
+        for (const auto &font : sourceFonts)
+            if (font.glyphs.size() != 96)
+                throw std::runtime_error("Incomplete original font map");
         Game game;
         Game status;
         auto expectHud = [&](const std::string &fragment, bool present = true) {
@@ -127,7 +133,11 @@ int main() {
             for (int type = 0; type < 12; type++)
                 game.spawn(Game::kindForSource(type), type % game.web.lanes(), .4f);
             game.droidActive = true;
-            render(0, 0);
+            for (float age : {0.f, .11f, .22f, .33f}) {
+                for (auto &enemy : game.enemies)
+                    enemy.age = age;
+                render(0, 0);
+            }
         }
         for (int type = 0; type < 3; type++) {
             game.startBonus(type);
@@ -144,6 +154,17 @@ int main() {
         game.enemiesRemaining = 0;
         game.tick(.01f);
         render(0, 0);
+        for (auto kind : {Kind::Flipper, Kind::EnemyShot}) {
+            game.start();
+            game.autoFire = false;
+            game.invulnerable = 0;
+            game.spawn(kind, game.lane, .0001f);
+            for (int i = 0; i < 190; ++i) {
+                game.tick(1.f / 120);
+                if (i % 20 == 0)
+                    render(0, 0);
+            }
+        }
         renderer.releaseGL();
         SDL_GL_DeleteContext(context);
         SDL_DestroyWindow(window);

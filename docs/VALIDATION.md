@@ -1,21 +1,37 @@
 # Validation
 
-Validated on Linux, 2026-10-26, with SDL 2.32.10, Mesa 26.0.8 and Intel
+Validated on Linux, 2026-10-27, with SDL 2.32.10, Mesa 26.0.8 and Intel
 ADL-N graphics. Physical headset/WiVRn validation remains outstanding.
 
-Both the default OpenXR build and `TEMPEST_OPENXR=OFF` desktop build pass all
-five CTest suites:
+The default OpenXR build passes all seven CTest suites. The build configured
+with `TEMPEST_OPENXR=OFF` passes its six applicable suites:
 
 - Gameplay, steering, transitions and ship-follow camera.
-- Audit regressions, enemy roster, all 100 wave budgets, upgrades, both zaps,
-  bonus success/failure and campaign victory.
+- Audit regressions, all enemy families and 100 wave generation budgets,
+  powerups, both zaps, bonus courses, death/respawn and campaign victory.
 - Original tracker decoding, module selection and pause behavior.
-- OpenGL sky coverage, source meshes, enemies, bonus scenes and effects.
-- Original module hashes and lossless sample conversion.
+- Sample decoding, period-based pitch, detuned stereo pairs, delayed echo,
+  priority stealing under saturation, and frozen playback while paused.
+- OpenGL sky coverage, original raster/font assets, mesh animation, HUD states,
+  bonus scenes, death effects and frame feedback.
+- Original module/sample/art hashes and alpha-masked CRY conversion.
+- Injected OpenXR runtime failure: play pauses and capture, relative mouse mode
+  and XR intent are released before the process exits.
 
-The campaign regression executable also passes AddressSanitizer and
-UndefinedBehaviorSanitizer. Regenerating webs, campaign tables and meshes from
-the pinned source reproduces their generated headers byte for byte.
+The campaign suite completes **all 24 bonus courses using public wheel/button
+controls**, including their forced impulses, speed changes, accuracy awards and
+finish gates. It no longer assigns cursor coordinates to pass gates. Generation
+budget tests clear spawned enemies to check the 100 schedules; they do not claim
+a complete human campaign playthrough.
+
+The former bonus-exit camera jump is covered at entry, exit and next-web reset
+for all three families. Boundary deltas must stay below 0.03 meters per 120 Hz
+tick. Explosion/capture paths also test pause, frozen combat, same-wave respawn,
+final-life behavior and camera continuity, with a 0.06-meter tick limit.
+
+The campaign executable passes AddressSanitizer and UndefinedBehaviorSanitizer.
+Regenerating webs, campaign tables, meshes, original art/font maps and sample
+metadata from the pinned source reproduces their output bytes exactly.
 
 The isolated native OpenXR fixture (`python3 tools/test_xr.py`) used Monado's
 simulated HMD, null compositor and native EGL:
@@ -27,16 +43,28 @@ simulated HMD, null compositor and native EGL:
 | Ring bonus | 90 | 89 |
 | Tunnel bonus | 90 | 89 |
 | Psychedelic bonus | 90 | 89 |
+| Explosion/respawn | 90 | 89 |
+| Flipper capture | 90 | 89 |
 
 The first session exercised 144 transition frames, reached 13.9995 meters of
 the 14-meter flight, and included 102 jumping frames with a late jump across
-the web reset. The first frame in each session precedes stereo submission.
+the web reset. Both death scenes rendered 88 death-animation frames. The first
+frame in each session precedes stereo submission. All seven sessions finished
+without GL errors or unexpected runtime loss.
 
-An isolated Xvfb input check opened normal play, started the saved level and
-quit through Ctrl+Q. The six-field settings format restored unlocked wave 17
-and its `tune7.mod` selection. The older five-field format restored wave 1 and
-`rave4.mod`. Both retained the best score and wrote the six-field format via
-the temporary-file rename path. Normal user preferences were untouched.
+Source-art title, bonus and capture screenshots were visually inspected.
+An isolated Xvfb progress check also verified the older five-field and current
+six-field settings formats, restoring wave 1 / `rave4.mod` and wave 17 /
+`tune7.mod` respectively, retaining best score and atomically saving preferences.
 
 These checks establish simulated runtime integration and rendering, rather
 than physical tracking, headset comfort or wireless streaming performance.
+
+The DomeD integration suite also passes all 12 checks against an isolated build
+of upstream DomeD `0eb4f48`, using a private nested Wayland compositor and a
+preloaded test-only OpenXR runtime. It verifies XR/desktop launch, injected
+wheel capture, Alt+Tab restoration, reopening XR, V toggling, killed-client
+recovery, heartbeat expiry, and rejection by an older compositor. The new
+runtime-exception case confirms restoration of desktop/bar presentation and
+release of both the native lease and SDL capture before normal game exit.
+The running user compositor and system OpenXR runtime were not changed.

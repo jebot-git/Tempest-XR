@@ -13,8 +13,8 @@ upstream project's contributors. That repository does not provide a general
 open-source license grant. The imported data is not relicensed by this project.
 
 SDL2, Mesa/OpenGL/EGL, X11 and the OpenXR loader/runtime are system dependencies
-and retain their respective licenses. No copies of their libraries or original
-Tempest raster graphics are bundled here; original audio assets are described below.
+and retain their respective licenses. No copies of their libraries are bundled;
+original game data and assets are described here.
 
 `assets/music/*.mod` contains the seven original Jaguar Tempest 2000 music
 modules from the same pinned repository's `src/sounds/` directory. Music credits:
@@ -44,3 +44,11 @@ Comic Chat mock runtime, under the MIT license reproduced in
 `tests/MOCK_RUNTIME_LICENSE.txt`. It is not installed with the game. The native
 DomeD link uses the system libcurl and nlohmann-json libraries; no copies of
 those libraries are bundled by this project's installer.
+
+`assets/art/*.bmp` are decoded versions of five original CRY sprite sheets.
+Original art/font credits include Joby, Jeff Minter and Atari; all rights remain
+with the original owners. The manifest records pinned source URLs and hashes.
+`src/raster_data.hpp` imports the three original font coordinate maps. These
+assets are not relicensed by this project. `tools/cry_palette.json` records Atari
+hardware color-conversion table values from the Tom & Jerry reference manual;
+see its reference URL and `docs/SOURCE_NOTES.md` for the conversion method.

@@ -5,6 +5,7 @@
     {
       "file": "01.wav",
       "name": "Engine Noise 1",
+      "priority": 1,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 4512,
@@ -15,6 +16,7 @@
     {
       "file": "02.wav",
       "name": "Player Shot Normal 2",
+      "priority": 2,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 1000,
@@ -25,6 +27,7 @@
     {
       "file": "03.wav",
       "name": "Engine Noise",
+      "priority": 3,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 13176,
@@ -35,6 +38,7 @@
     {
       "file": "04.wav",
       "name": "Player Death",
+      "priority": 4,
       "period": 214,
       "sample_rate": 16574,
       "bytes": 21658,
@@ -45,6 +49,7 @@
     {
       "file": "05.wav",
       "name": "Player Death 2",
+      "priority": 5,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 9304,
@@ -55,6 +60,7 @@
     {
       "file": "06.wav",
       "name": "Player Shot Normal",
+      "priority": 6,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 1956,
@@ -65,6 +71,7 @@
     {
       "file": "07.wav",
       "name": "Player Jump",
+      "priority": 7,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 6366,
@@ -75,6 +82,7 @@
     {
       "file": "08.wav",
       "name": "Crackle",
+      "priority": 8,
       "period": 214,
       "sample_rate": 16574,
       "bytes": 17812,
@@ -85,6 +93,7 @@
     {
       "file": "09.wav",
       "name": "Cleared Level",
+      "priority": 9,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 14242,
@@ -95,6 +104,7 @@
     {
       "file": "10.wav",
       "name": "Warp",
+      "priority": 10,
       "period": 568,
       "sample_rate": 6245,
       "bytes": 28360,
@@ -105,6 +115,7 @@
     {
       "file": "11.wav",
       "name": "Large Explosion",
+      "priority": 11,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 20674,
@@ -115,6 +126,7 @@
     {
       "file": "12.wav",
       "name": "Powered Up Shot",
+      "priority": 12,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 6518,
@@ -125,6 +137,7 @@
     {
       "file": "13.wav",
       "name": "Get Power Up",
+      "priority": 13,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 6890,
@@ -135,6 +148,7 @@
     {
       "file": "14.wav",
       "name": "Tink For Spike",
+      "priority": 14,
       "period": 254,
       "sample_rate": 13964,
       "bytes": 1038,
@@ -145,6 +159,7 @@
     {
       "file": "15.wav",
       "name": "NME At Top Of Web",
+      "priority": 15,
       "period": 428,
       "sample_rate": 8287,
       "bytes": 30,
@@ -155,6 +170,7 @@
     {
       "file": "16.wav",
       "name": "Pulse For Pulsar",
+      "priority": 16,
       "period": 856,
       "sample_rate": 4144,
       "bytes": 6654,
@@ -165,6 +181,7 @@
     {
       "file": "17.wav",
       "name": "Normal Explosion",
+      "priority": 17,
       "period": 214,
       "sample_rate": 16574,
       "bytes": 10934,
@@ -175,6 +192,7 @@
     {
       "file": "18.wav",
       "name": "Extra Explosion",
+      "priority": 18,
       "period": 856,
       "sample_rate": 4144,
       "bytes": 6346,
@@ -185,6 +203,7 @@
     {
       "file": "19.wav",
       "name": "Static or Pulsar",
+      "priority": 19,
       "period": 284,
       "sample_rate": 12489,
       "bytes": 16356,
@@ -195,6 +214,7 @@
     {
       "file": "20.wav",
       "name": "Pulsar Pulse",
+      "priority": 20,
       "period": 856,
       "sample_rate": 4144,
       "bytes": 3852,
@@ -205,6 +225,7 @@
     {
       "file": "21.wav",
       "name": "Off Shielded NME",
+      "priority": 21,
       "period": 170,
       "sample_rate": 20864,
       "bytes": 10186,
@@ -215,6 +236,7 @@
     {
       "file": "22.wav",
       "name": "Excellent",
+      "priority": 22,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 22902,
@@ -225,6 +247,7 @@
     {
       "file": "23.wav",
       "name": "Superzapper Recharge",
+      "priority": 22,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 43352,
@@ -235,6 +258,7 @@
     {
       "file": "24.wav",
       "name": "yes",
+      "priority": 24,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 23148,
@@ -245,6 +269,7 @@
     {
       "file": "25.wav",
       "name": "oneup",
+      "priority": 25,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 17326,
@@ -255,6 +280,7 @@
     {
       "file": "26.wav",
       "name": "screeeam",
+      "priority": 26,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 17768,
@@ -265,6 +291,7 @@
     {
       "file": "27.wav",
       "name": "sexy yes 1",
+      "priority": 27,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 11432,
@@ -275,6 +302,7 @@
     {
       "file": "28.wav",
       "name": "sexy yes 2",
+      "priority": 28,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 12854,
@@ -285,6 +313,7 @@
     {
       "file": "29.wav",
       "name": "tink",
+      "priority": 30,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 1486,
@@ -295,6 +324,7 @@
     {
       "file": "30.wav",
       "name": "zero",
+      "priority": 31,
       "period": 512,
       "sample_rate": 6928,
       "bytes": 8,

@@ -70,7 +70,7 @@ static void stereo(Renderer &renderer, const Game &game, int width, int height) 
 int main(int argc, char **argv) {
     bool wantXR = false, sbs = false, demo = false, smoke = false, noAudio = false, noMusic = false,
          warpDemo = false, effectsDemo = false, enemyDemo = false, explicitLevel = false;
-    int bonusDemo = -1;
+    int bonusDemo = -1, deathDemo = -1;
     int frameLimit = 0, startingLevel = 1;
     std::string capture, musicDirectory, launchMode = "auto", reportPath;
     try {
@@ -99,6 +99,8 @@ int main(int argc, char **argv) {
                 effectsDemo = true;
             else if (arg == "--enemy-demo")
                 enemyDemo = true;
+            else if (arg == "--death-demo")
+                deathDemo = std::clamp(std::stoi(value()), 0, 1);
             else if (arg == "--bonus-demo")
                 bonusDemo = std::clamp(std::stoi(value()), 0, 2);
             else if (arg == "--no-music")
@@ -124,7 +126,7 @@ int main(int argc, char **argv) {
                     << "Tempest XR\nUsage: tempest-xr [--xr|--desktop] [--stereo] [--level 1..100] "
                        "[--no-audio] [--no-music] [--music-dir DIR]\n       [--demo] [--warp-demo] "
                        "[--effects-demo] [--enemy-demo] [--bonus-demo 0..2] [--frames N] "
-                       "[--capture image.ppm] [--report diagnostics.json] "
+                       "[--death-demo 0..1] [--capture image.ppm] [--report diagnostics.json] "
                        "[--smoke-test image.ppm]\n\nWheel: move | LMB: fire | RMB: Superzapper | "
                        "MMB/Space: jump\nEnter: start/retry | P/Esc: pause | F: automatic fire | "
                        "V: toggle OpenXR\nB: half-SBS preview | R: recenter XR | F11: "
@@ -278,6 +280,12 @@ int main(int argc, char **argv) {
                 game.spawn(Game::kindForSource(type), type % game.web.lanes(),
                            .65f + float(type % 3) * .1f);
         }
+        if (deathDemo >= 0) {
+            game.start(startingLevel);
+            game.autoFire = false;
+            game.invulnerable = 0;
+            game.spawn(deathDemo ? Kind::Flipper : Kind::EnemyShot, game.lane, .0001f);
+        }
         if (bonusDemo >= 0) {
             game.start(startingLevel);
             game.startBonus(bonusDemo);
@@ -289,7 +297,7 @@ int main(int argc, char **argv) {
         }
         bool quit = false, fullscreen = false;
         bool persist = !frameLimit && !demo && !enemyDemo && !effectsDemo && bonusDemo < 0 &&
-                       !warpDemo && !explicitLevel;
+                       !warpDemo && !explicitLevel && deathDemo < 0;
         int savedUnlocked = game.unlockedLevel;
         Mode lastMode = game.mode;
         auto saveSettings = [&]() {

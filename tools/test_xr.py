@@ -52,13 +52,16 @@ with tempfile.TemporaryDirectory(prefix='tempest-xr-test-') as directory:
                           warp_frames=int(motion[1]),max_warp_distance=float(motion[2]),jump_frames=int(motion[3]),
                           physical_headset_tested=False)
             extra={}
-            for name,options in [('enemies',['--enemy-demo']),('rings',['--bonus-demo','0']),('tunnel',['--bonus-demo','1']),('psychedelic',['--bonus-demo','2'])]:
+            for name,options in [('enemies',['--enemy-demo']),('rings',['--bonus-demo','0']),('tunnel',['--bonus-demo','1']),('psychedelic',['--bonus-demo','2']),('explosion',['--death-demo','0']),('snatch',['--death-demo','1'])]:
                 run=subprocess.run([root/'build/tempest-xr','--xr',*options,'--frames','90','--no-audio','--capture',out/(name+'.ppm')],env=env,capture_output=True,text=True,timeout=20)
                 log=run.stdout+run.stderr;(out/(name+'.log')).write_text(log)
                 stats=re.findall(r'OpenXR frames=(\d+) stereo_frames=(\d+)',log)
                 assert run.returncode==0 and stats and int(stats[-1][1])>=80,log
                 assert 'XR unavailable:' not in log and 'XR session ended:' not in log,log
                 extra[name]={'frames':int(stats[-1][0]),'stereo_frames':int(stats[-1][1])}
+                if name in ('explosion','snatch'):
+                    deaths=re.search(r'death_frames=(\d+)',log);assert deaths and int(deaths[1])>=80,log
+                    extra[name]['death_frames']=int(deaths[1])
             report['extra_scenarios']=extra
             (out/'report.json').write_text(json.dumps(report,indent=2)+'\n')
             print(json.dumps(report))

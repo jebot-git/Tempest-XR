@@ -1,8 +1,12 @@
 #include "render.hpp"
 #include "meshes.hpp"
+#include "raster_data.hpp"
+#include <SDL.h>
 #include <SDL_opengl.h>
 #include <array>
 #include <cstdio>
+#include <filesystem>
+#include <iostream>
 #include <map>
 
 namespace tempest {
@@ -41,7 +45,140 @@ static Color enemyColor(Kind kind) {
     }
     return cyan;
 }
+struct RasterAtlas {
+    unsigned texture = 0;
+    int width = 0, height = 0;
+    std::vector<uint8_t> rgba;
+};
+static std::map<std::string, RasterAtlas> rasterAtlases;
+static const RasterAtlas *rasterAtlas(std::string_view name) {
+    auto [it, fresh] = rasterAtlases.try_emplace(std::string(name));
+    auto &atlas = it->second;
+    if (fresh) {
+        std::filesystem::path directory = TEMPEST_ART_DIR;
+        char *base = SDL_GetBasePath();
+        if (base) {
+            auto installed = std::filesystem::path(base) / "../share/tempest-xr/art";
+            if (std::filesystem::is_directory(installed))
+                directory = installed;
+            SDL_free(base);
+        }
+        if (const char *overridePath = std::getenv("TEMPEST_ART_DIR"))
+            directory = overridePath;
+        SDL_Surface *raw = SDL_LoadBMP((directory / (std::string(name) + ".bmp")).c_str());
+        if (raw) {
+            SDL_Surface *surface = SDL_ConvertSurfaceFormat(raw, SDL_PIXELFORMAT_RGBA32, 0);
+            SDL_FreeSurface(raw);
+            if (surface) {
+                atlas.width = surface->w;
+                atlas.height = surface->h;
+                atlas.rgba.resize(size_t(atlas.width * atlas.height) * 4);
+                for (int y = 0; y < atlas.height; ++y)
+                    std::copy_n(static_cast<uint8_t *>(surface->pixels) + y * surface->pitch,
+                                atlas.width * 4, atlas.rgba.data() + size_t(y * atlas.width) * 4);
+                SDL_FreeSurface(surface);
+                glGenTextures(1, &atlas.texture);
+                glBindTexture(GL_TEXTURE_2D, atlas.texture);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, atlas.width, atlas.height, 0, GL_RGBA,
+                             GL_UNSIGNED_BYTE, atlas.rgba.data());
+            }
+        }
+        if (!atlas.texture)
+            std::cerr << "Original artwork unavailable: " << name << '\n';
+    }
+    return atlas.texture ? &atlas : nullptr;
+}
+bool Renderer::originalArtAvailable() {
+    bool available = true;
+    for (auto name : {"pic", "pic2", "pic4", "pic5", "pic6"})
+        available = rasterAtlas(name) && available;
+    return available;
+}
+static void rasterVertices(const RasterAtlas &atlas, const RasterRect &r, float x, float y, float w,
+                           float h) {
+    float u = float(r.x) / atlas.width, v = float(r.y) / atlas.height;
+    float u2 = float(r.x + r.width) / atlas.width, v2 = float(r.y + r.height) / atlas.height;
+    glTexCoord2f(u, v);
+    glVertex2f(x, y);
+    glTexCoord2f(u2, v);
+    glVertex2f(x + w, y);
+    glTexCoord2f(u2, v2);
+    glVertex2f(x + w, y + h);
+    glTexCoord2f(u, v2);
+    glVertex2f(x, y + h);
+}
+static bool drawRaster(std::string_view name, float x, float y, float w, float h,
+                       Color color = {1, 1, 1, 1}) {
+    const auto *rect = sourceSprite(name);
+    const auto *atlas = rect ? rasterAtlas(rect->atlas) : nullptr;
+    if (!atlas)
+        return false;
+    glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT | GL_COLOR_BUFFER_BIT);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBindTexture(GL_TEXTURE_2D, atlas->texture);
+    glColor4f(color.r, color.g, color.b, color.a);
+    glBegin(GL_QUADS);
+    rasterVertices(*atlas, *rect, x, y, w, h);
+    glEnd();
+    glPopAttrib();
+    return true;
+}
+static void fallbackGlyph(char ch, float x, float y, float scale);
+static bool sourceText(int fontIndex, float x, float y, const std::string &value, float scale,
+                       Color color) {
+    const auto &font = sourceFonts[size_t(fontIndex)];
+    const auto *atlas = rasterAtlas(font.atlas);
+    if (!atlas)
+        return false;
+    glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT | GL_COLOR_BUFFER_BIT);
+    glEnable(GL_TEXTURE_2D);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glBindTexture(GL_TEXTURE_2D, atlas->texture);
+    glColor4f(color.r, color.g, color.b, color.a);
+    float origin = x;
+    std::vector<std::pair<char, std::array<float, 2>>> fallback;
+    glBegin(GL_QUADS);
+    for (unsigned char ch : value) {
+        if (ch == '\n') {
+            x = origin;
+            y += 10 * scale;
+            continue;
+        }
+        if (std::string_view("/+[]><=%").find(char(ch)) != std::string_view::npos)
+            fallback.push_back({char(ch), {x, y}});
+        else if (ch >= 32 && ch < 128 && ch != ' ') {
+            auto xy = font.glyphs[size_t(ch - 32)];
+            RasterRect rect{"",
+                            font.atlas,
+                            xy[0],
+                            xy[1],
+                            std::min(font.width, atlas->width - xy[0]),
+                            std::min(font.height, atlas->height - xy[1])};
+            rasterVertices(*atlas, rect, x, y, 5 * scale, 7 * scale);
+        }
+        x += 6 * scale;
+    }
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    glBegin(GL_QUADS);
+    for (const auto &[ch, xy] : fallback)
+        fallbackGlyph(ch, xy[0], xy[1], scale);
+    glEnd();
+    glPopAttrib();
+    return true;
+}
 void Renderer::releaseGL() {
+    for (auto &[name, atlas] : rasterAtlases)
+        if (atlas.texture)
+            glDeleteTextures(1, &atlas.texture);
+    rasterAtlases.clear();
     for (auto &state : meltStates) {
         if (state.texture)
             glDeleteTextures(1, &state.texture);
@@ -149,6 +286,20 @@ static const std::map<char, std::array<uint8_t, 7>> glyphs = {
     {']', {14, 2, 2, 2, 2, 2, 14}},      {'>', {16, 8, 4, 2, 4, 8, 16}},
     {'<', {1, 2, 4, 8, 4, 2, 1}},        {'=', {0, 0, 31, 0, 31, 0, 0}},
     {'%', {17, 2, 4, 4, 8, 16, 17}}};
+static void fallbackGlyph(char ch, float x, float y, float scale) {
+    auto found = glyphs.find(ch);
+    if (found == glyphs.end())
+        return;
+    for (int row = 0; row < 7; ++row)
+        for (int col = 0; col < 5; ++col)
+            if (found->second[row] & (1 << (4 - col))) {
+                float xx = x + col * scale, yy = y + row * scale, size = scale * .87f;
+                glVertex2f(xx, yy);
+                glVertex2f(xx + size, yy);
+                glVertex2f(xx + size, yy + size);
+                glVertex2f(xx, yy + size);
+            }
+}
 void Renderer::rect(float x, float y, float w, float h, Color c) {
     glColor4f(c.r, c.g, c.b, c.a);
     glBegin(GL_QUADS);
@@ -159,6 +310,8 @@ void Renderer::rect(float x, float y, float w, float h, Color c) {
     glEnd();
 }
 void Renderer::text(float x, float y, const std::string &value, float scale, Color color) {
+    if (sourceText(scale >= 3 ? 0 : 2, x, y, value, scale, color))
+        return;
     glColor4f(color.r, color.g, color.b, color.a);
     glBegin(GL_QUADS);
     float origin = x;
@@ -225,7 +378,7 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
     case Kind::Tanker:
     case Kind::FuseTanker:
     case Kind::PulsarTanker:
-        original = "s_fliptank";
+        original = int(e.age * 5) % 2 ? "s_fliptank2" : "s_fliptank";
         break;
     case Kind::SuperFlipper:
         original = "s_flip1";
@@ -239,9 +392,12 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
     case Kind::Adroid:
         original = "adroid";
         break;
-    case Kind::Beast:
-        original = "hornm1";
-        break;
+    case Kind::Beast: {
+        static const char *frames[] = {"hornm1", "hornm2", "hornm3", "hornm2"};
+        original = frames[int(e.age * 10) % 4];
+    }
+
+    break;
     case Kind::EnemyShot:
         original = "pshot";
         break;
@@ -384,6 +540,36 @@ bool Renderer::mesh(std::string_view name, Vec3 center, Vec3 tangent, Vec3 norma
     }
     return true;
 }
+void Renderer::deathWorld(const Game &g) {
+    if (g.deathTime <= 0)
+        return;
+    float t = g.deathProgress();
+    Vec3 origin = g.deathOrigin();
+    if (g.snatched) {
+        Vec3 p = origin + Vec3{0, 0, -9 * t};
+        mesh("sclaw0", p, {1, 0, 0}, {0, 1, 0}, .16f * (1 - .6f * t), lime, t * 6.2831853f);
+        mesh("s_flipper", p + Vec3{0, .14f, 0}, {1, 0, 0}, {0, 1, 0}, .13f, pink, t * 6.2831853f);
+        line(origin, p, spectrum(t, (1 - t) * .5f));
+        return;
+    }
+    const auto *shape = sourceMesh("sclaw0");
+    if (!shape)
+        return;
+    for (size_t i = 0; i < shape->faces.size(); ++i) {
+        const auto &face = shape->faces[i];
+        float angle = float(i) * 2.4f, spin = t * (5 + float(i));
+        Vec3 p = origin + Vec3{std::cos(angle) * t * 1.4f, std::sin(angle) * t * 1.4f, -t * 2};
+        Color c = spectrum(float(i) / shape->faces.size());
+        glBegin(GL_POLYGON);
+        for (auto v : face.vertices) {
+            glColor4f(c.r * v.light, c.g * v.light, c.b * v.light, 1 - t);
+            float x = (v.x * std::cos(spin) - v.y * std::sin(spin)) * .16f;
+            float y = (v.x * std::sin(spin) + v.y * std::cos(spin)) * .16f;
+            glVertex3f(p.x + x, p.y + y, p.z);
+        }
+        glEnd();
+    }
+}
 void Renderer::grid(const Game &g, Vec3 offset, float alpha) {
     int n = g.web.lanes();
     Color theme = cyan;
@@ -407,63 +593,99 @@ void Renderer::grid(const Game &g, Vec3 offset, float alpha) {
             line(g.edge(i, d) + offset, g.edge(i + 1, d) + offset, c);
     }
 }
-void Renderer::particleMessage(const Game &g) {
-    if (g.messageTime <= 0 || g.mode == Mode::Menu)
+void Renderer::particleMessage(const Game &g, bool headset) {
+    if ((g.messageTime <= 0 && g.mode != Mode::GameOver) || g.mode == Mode::Menu)
         return;
-    float t = 1 - g.messageTime / g.messageDuration;
+    float t = g.mode == Mode::GameOver ? std::fmod(g.time, 3.f) / 3
+                                       : 1 - g.messageTime / g.messageDuration;
     float melt = std::max(0.f, (t - .45f) / .55f);
-    float pixel = .019f;
-    Vec3 p = g.shipPosition() + Vec3{-float(g.message.size()) * 6 * pixel * .5f, .55f, 1.1f};
+    std::string sprite =
+        g.mode == Mode::GameOver                                           ? "gameover"
+        : g.message == "EXCELLENT"                                         ? "points2000"
+        : g.message == "YES YES YES" || g.message.find("BONUS TOKEN") == 0 ? "excellent"
+        : g.message == "250" || g.message == "500" || g.message == "750"   ? g.message
+                                                                           : "";
+    const auto *rect = sourceSprite(sprite);
+    const auto &font = sourceFonts[0];
+    const auto *atlas = rasterAtlas(rect ? rect->atlas : font.atlas);
+    if (!atlas)
+        return;
+    float pixel = rect ? .009f : .0075f;
+    float width = rect ? rect->width * pixel : float(g.message.size() * (font.width + 1)) * pixel;
+    Vec3 origin = (headset || g.isBonus() ? g.shipPosition() : Vec3{0, 0, -3.8f}) +
+                  Vec3{-width * .5f, .6f, 1.1f};
+    glPushAttrib(GL_ENABLE_BIT | GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT);
+    glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
-    glPushMatrix();
-    glTranslatef(p.x, p.y, p.z);
-    glRotatef(melt * 28, 0, 0, 1);
     glBegin(GL_QUADS);
-    int letter = 0;
-    for (char ch : g.message) {
-        auto found = glyphs.find(ch);
-        if (found != glyphs.end())
-            for (int row = 0; row < 7; row++)
-                for (int col = 0; col < 5; col++)
-                    if (found->second[row] & (1 << (4 - col))) {
-                        float seed = float(letter * 41 + row * 13 + col * 7);
-                        float x =
-                            float(letter * 6 + col) * pixel + std::sin(seed) * melt * melt * 1.5f;
-                        float y = -float(row) * pixel + std::cos(seed * 1.7f) * melt * melt;
-                        float z = std::sin(seed * .4f) * melt;
-                        Color c = spectrum(float(letter) * .035f + g.time * .2f, 1 - melt);
-                        glColor4f(c.r, c.g, c.b, c.a);
-                        glVertex3f(x, y, z);
-                        glVertex3f(x + pixel * .88f, y, z);
-                        glVertex3f(x + pixel * .88f, y - pixel * .88f, z);
-                        glVertex3f(x, y - pixel * .88f, z);
-                    }
-        letter++;
+    auto emit = [&](int ax, int ay, float x, float y, float seed) {
+        if (ax < 0 || ay < 0 || ax >= atlas->width || ay >= atlas->height)
+            return;
+        const auto *rgba = atlas->rgba.data() + size_t(ay * atlas->width + ax) * 4;
+        if (!rgba[3])
+            return;
+        float xx = origin.x + x * pixel + std::sin(seed) * melt * melt * 1.5f;
+        float yy = origin.y - y * pixel + std::cos(seed * 1.7f) * melt * melt;
+        float zz = origin.z + std::sin(seed * .4f) * melt;
+        glColor4f(rgba[0] / 255.f, rgba[1] / 255.f, rgba[2] / 255.f, 1 - melt);
+        float s = pixel * .95f;
+        glVertex3f(xx, yy, zz);
+        glVertex3f(xx + s, yy, zz);
+        glVertex3f(xx + s, yy - s, zz);
+        glVertex3f(xx, yy - s, zz);
+    };
+    if (rect) {
+        for (int y = 0; y < rect->height; ++y)
+            for (int x = 0; x < rect->width; ++x)
+                emit(rect->x + x, rect->y + y, float(x), float(y), float(y * rect->width + x));
+    } else {
+        for (size_t i = 0; i < g.message.size(); ++i) {
+            unsigned char ch = g.message[i];
+            if (ch < 33 || ch >= 128)
+                continue;
+            auto xy = font.glyphs[size_t(ch - 32)];
+            for (int y = 0; y < font.height; ++y)
+                for (int x = 0; x < font.width; ++x)
+                    emit(xy[0] + x, xy[1] + y, float(i * (font.width + 1) + x), float(y),
+                         float(i * 997 + y * 31 + x));
+        }
     }
     glEnd();
-
-    glPopMatrix();
-    glDepthMask(GL_TRUE);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glPopAttrib();
 }
 void Renderer::bonusWorld(const Game &g) {
-    if (g.bonusType == 2) {
+    if (g.bonusType != 1) {
+        const auto *ground = rasterAtlas("pic4");
+        glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
+        if (ground) {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, ground->texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        }
         glBegin(GL_QUADS);
         for (int z = 0; z < 32; z++)
             for (int x = -16; x < 16; x++) {
-                Color c = spectrum(float(x + z) * .045f + g.bonusTime * .1f, .45f);
-                if ((x + z) % 2)
-                    c = {c.r * .2f, c.g * .2f, c.b * .2f, .4f};
+                Color c = g.bonusType == 2
+                              ? spectrum(float(x + z) * .025f + g.bonusTime * .04f, .65f)
+                              : Color{1, 1, 1, .6f};
                 glColor4f(c.r, c.g, c.b, c.a);
                 float zz = -3 - float(z) * 1.5f + std::fmod(g.bonusDistance / 32, 1.5f),
                       xx = float(x) * 1.5f;
-                for (auto p : {Vec3{xx, -2.2f, zz}, Vec3{xx + 1.5f, -2.2f, zz},
-                               Vec3{xx + 1.5f, -2.2f, zz - 1.5f}, Vec3{xx, -2.2f, zz - 1.5f}})
-                    glVertex3f(p.x, p.y, p.z);
+                float u = float(x) / 8, v = float(z) / 8 - g.bonusDistance / 512;
+                glTexCoord2f(u, v);
+                glVertex3f(xx, -2.2f, zz);
+                glTexCoord2f(u + .125f, v);
+                glVertex3f(xx + 1.5f, -2.2f, zz);
+                glTexCoord2f(u + .125f, v + .125f);
+                glVertex3f(xx + 1.5f, -2.2f, zz - 1.5f);
+                glTexCoord2f(u, v + .125f);
+                glVertex3f(xx, -2.2f, zz - 1.5f);
             }
         glEnd();
+        glPopAttrib();
     }
     for (int k = g.bonusGate; k < std::min(g.bonusGate + 14, g.bonusGateCount()); k++) {
         Vec3 center = g.bonusTarget(k);
@@ -562,6 +784,16 @@ void Renderer::world(const Game &g, bool headset) {
     }
     glEnd();
     glPointSize(1.4f);
+    if (g.transitionDepth() > 0 || g.isBonus()) {
+        float speed = g.isBonus() ? g.bonusSpeed / 30 : 1 + g.warpDistance();
+        for (int i = 0; i < 256; ++i) {
+            float angle = float(i) * 2.399963f, y = 1 - 2 * (float(i) + .5f) / 256;
+            float r = std::sqrt(1 - y * y);
+            Vec3 p{r * std::cos(angle) * 110, y * 110, r * std::sin(angle) * 110};
+            line(p, p + Vec3{0, 0, std::min(18.f, speed * 1.2f)}, spectrum(float(i) / 256, .55f));
+        }
+        flush();
+    }
     glPushMatrix();
     if (headset || g.isBonus()) {
         auto camera = g.xrCameraPosition();
@@ -570,7 +802,7 @@ void Renderer::world(const Game &g, bool headset) {
     if (g.isBonus()) {
         bonusWorld(g);
         flush();
-        particleMessage(g);
+        particleMessage(g, headset);
         glPopMatrix();
         if (headset)
             headsetHud(g);
@@ -673,14 +905,20 @@ void Renderer::world(const Game &g, bool headset) {
             enemy(g, e);
         }
     }
-    if (g.mode != Mode::GameOver && (g.invulnerable <= 0 || int(g.time * 12) % 2 == 0)) {
+    deathWorld(g);
+    if (g.deathTime <= 0 && g.mode != Mode::GameOver &&
+        (g.invulnerable <= 0 || int(g.time * 12) % 2 == 0)) {
         Vec3 p = g.shipPosition(), a = g.edge(g.lane, 0), b = g.edge(g.lane + 1, 0), t = b - a;
         float length = std::sqrt(t.x * t.x + t.y * t.y);
         t = t * (1 / std::max(.001f, length));
         Vec3 normal = {-t.y, t.x, 0};
         p.z += .015f;
-        std::string frame =
-            (g.jumpTime > 0 ? "gsclaw" : "sclaw") + std::to_string(int(g.visualLane * 8) % 8);
+        int animation = int(g.visualLane * 8) % 8;
+        if (g.jumpTime > 0) {
+            int phase = std::clamp(int((.85f - g.jumpTime) / .85f * 16), 0, 15);
+            animation = phase < 8 ? phase : 15 - phase;
+        }
+        std::string frame = (g.jumpTime > 0 ? "gsclaw" : "sclaw") + std::to_string(animation);
         mesh(frame, p, t, normal, .16f, lime);
     }
     for (auto &p : g.particles) {
@@ -726,8 +964,21 @@ void Renderer::world(const Game &g, bool headset) {
         }
     }
     flush();
-    particleMessage(g);
+    particleMessage(g, headset);
+    if (g.oneUpTime > 0) {
+        Vec3 p = g.shipPosition() + Vec3{0, .8f + (1.8f - g.oneUpTime) * .1f, 1};
+        glPushMatrix();
+        glTranslatef(p.x, p.y, p.z);
+        drawRaster("oneup", -.3f, .1f, .6f, -.2f, {1, 1, 1, std::min(1.f, g.oneUpTime)});
+        glPopMatrix();
+    }
     glPopMatrix();
+    if (headset && g.mode == Mode::Menu) {
+        glPushMatrix();
+        glTranslatef(0, .8f, -3.8f);
+        drawRaster("logo", -1.5f, .5625f, 3, -1.125f);
+        glPopMatrix();
+    }
     if (headset)
         headsetHud(g);
 }
@@ -776,6 +1027,9 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
         else if (g.isBonus())
             result.push_back(g.bonusType == 1 ? "WHEEL TO STEER"
                                               : "WHEEL X / HOLD LMB UP / RMB DOWN");
+        else if (g.deathTime > 0)
+            result.push_back(g.snatched ? "SHIP CAPTURED / RETURNING TO WEB"
+                                        : "SHIP DESTROYED / RETURNING TO WEB");
         else if (g.mode == Mode::Transition)
             result.push_back("WEB CLEAR / AVOID SPIKES / JUMP TO CLEAR");
         else
@@ -863,8 +1117,9 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
         rect(28, 171, 585, 584, {.006f, .012f, .032f, .9f});
         rect(48, 191, 4, 31, cyan);
         text(71, 198, "RECONSTRUCTION / 01", 1.8f, cyan);
-        text(67, 263, "TEMPEST", 11, white);
-        text(65, 364, "2000", 18, cyan);
+        if (!drawRaster("logo", 70, 255, 495, 186))
+            text(67, 263, "TEMPEST", 11, white);
+        sourceText(1, 70, 445, "2000", 11, white);
         text(71, 531, "THE WEB IS WAITING.", 2, pink);
         text(71, 578, "SCROLL THE RIM. CLEAR THE TUBE.", 1.55f, {.57f, .67f, .8f});
         text(71, 608,
@@ -887,12 +1142,15 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
                                 : g.mode == Mode::GameOver ? "GAME OVER"
                                                            : "WEB CLEAR";
             float x = 720 - float(label.size()) * 6 * 6 / 2;
-            text(x, 375, label, 6, g.mode == Mode::GameOver ? pink : cyan);
+            bool rasterTitle =
+                g.mode == Mode::GameOver && drawRaster("gameover", 580, 348, 280, 131);
+            if (!rasterTitle)
+                text(x, 375, label, 6, g.mode == Mode::GameOver ? pink : cyan);
             std::string sub = g.mode == Mode::Victory    ? "CAMPAIGN COMPLETE / ENTER TO PLAY AGAIN"
                               : g.mode == Mode::Paused   ? "P / ESC TO RESUME"
                               : g.mode == Mode::GameOver ? "ENTER TO PLAY AGAIN"
                                                          : "AVOID SPIKES / JUMP TO CLEAR";
-            text(720 - float(sub.size()) * 6 * 1.8f / 2, 462, sub, 1.8f, white);
+            text(720 - float(sub.size()) * 6 * 1.8f / 2, rasterTitle ? 510 : 462, sub, 1.8f, white);
         }
         if (g.boost)
             text(1130, 751, "POWERED SHOTS", 1.5f, lime);

@@ -5,11 +5,15 @@
 #include <array>
 namespace tempest {
 class Audio {
+    friend struct AudioProbe;
     struct Voice {
         float phase = 0, remaining = 0, duration = 0;
         Sound sound = Sound::Shot;
         int sample = -1;
-        size_t position = 0;
+        double position = 0;
+        float step = 1, gain = 1, pan = 0, delay = 0;
+        int priority = 0;
+        uint64_t serial = 0;
     };
     SDL_AudioDeviceID device = 0;
     std::array<Voice, 32> voices{};
@@ -22,6 +26,9 @@ class Audio {
     std::string musicDirectory, currentTrack;
     bool manuallySelected = false;
     int manualTrack = -1;
+    int gatePeriod = 512;
+    uint32_t random = 2000;
+    uint64_t voiceSerial = 0;
     static void callback(void *self, Uint8 *stream, int size);
 
   public:

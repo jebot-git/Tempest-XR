@@ -16,9 +16,12 @@ Jeff Minter / Atari. Source preservation/annotations: upstream contributors.
 | `pupvex`, `hilaser`, `jenab`, `adenoid`, `sprzap`, `mkdroid` | Laser/points/jump/points/droid/token progression and friendly autonomous firing. Existing droids let the pickup sequence skip to the token. |
 | `fire`, `r_end1`, `szap_avail` | Full initial Superzapper followed by one-enemy emergency zap. Spikes survive both. |
 | `doscore`, `scores` | Centralized scoring and threshold awards, including wave and bonus score. |
-| `bonies`, `courses`, `tunnels`, `cg`, `run_gate` | Three bonus families, original ring XY layouts and tunnel steering courses, token entry and five-level reward with late-game skip limit. |
+| `bonies`, `courses`, `tunnels`, `cg`, `run_gate`, `gatefx` | Three bonus families; original layouts, `(delay+1)*12` emission gaps, up/down impulses, one-eighth boosts, accuracy scoring and finish gates. Token entry and five-level reward keep the late-game skip limit. |
 | `modtable`, `webtunes`, `modnum` | Original seven tracker files; title, 16-wave gameplay blocks and bonus selections. |
-| `obj2d.s` | Original face topology, per-vertex intensities and 37 shaded/animated object meshes. |
+| `obj2d.s` | Original face topology, intensities and 37 meshes; beast, tanker and jump frames animate. |
+| `afont.s`, `bfont.s`, `cfont.s`, `images/*.cry` | All three 96-character font maps and five original sprite sheets, used for the title, score/announcement artwork, bitmap shattering and bonus floor. |
+| `ouch`, `zap_player`, `snatch_it_away`, `take_me_to_your_leader` | Polygon breakup, a flipper carrying the claw down-web, camera recoil and same-wave respawn. |
+| `fox`, `sayex`, `zapson`, `yeson`, `spup` | Source sample periods/priorities, detuned dual voices, randomized explosion pitch and boost-dependent gate voices. |
 | `ringstars`, `initpstarfield` | Animated ring and sine pattern families extended to a spherical XR sky. |
 | `ipix`, `any_pixex`, `draw_mpixex`, `draw_pring` | Colored explosion pixels, bitmap breakup, beam rings and trails. |
 | `fade`, `ffade` | Per-view scale/rotate/intensity framebuffer feedback (source scale 500/512). |
@@ -30,13 +33,15 @@ Jeff Minter / Atari. Source preservation/annotations: upstream contributors.
 python3 tools/import_webs.py
 python3 tools/import_campaign.py
 python3 tools/import_meshes.py
+python3 tools/import_art.py
 python3 tools/fetch_soundtrack.py
 python3 tools/fetch_effects.py
 python3 tools/check_assets.py
 ```
 
 `import_webs` and `import_campaign` accept `--source /path/to/yak.s`;
-`import_meshes` accepts `--source /path/to/obj2d.s`. The asset fetchers accept
+`import_meshes` accepts `--source /path/to/obj2d.s`; `import_art` accepts
+`--source /path/to/tempest2k-checkout`. The asset fetchers accept
 `--source /path/to/tempest2k-checkout`. Without those options each reads the pinned
 GitHub revision. Generated headers record the original URL/SHA256. Asset
 manifests record source URLs, sizes and hashes. No ROM is used.
@@ -53,10 +58,13 @@ out and aliases the following `_nw100` data; the importer preserves that behavio
 Spawn ticks use a 60 Hz reference, with a fixed 120 Hz simulation step.
 
 Ring-course words pack delay, signed X, signed Y and gate effect. Their XY
-layouts and eight-course order are imported. The prototype uses fixed approach
-cadence and mouse-accessible hit windows. Tunnel courses preserve the original
-64-step steering sequences. These are playable adaptations rather than a direct
-port of the original mode-7 GPU renderer and every gate modifier.
+layouts, delays, effect types and eight-course order are imported. After a short
+initial XR approach, emission gaps use the source countdown and ground speed;
+boosts accelerate all approaching gates by one eighth. Up/down gates apply a
+short vertical impulse. Psycho mode overrides delay to eight as in `cg`.
+`run_gate`/`xbon` accuracy rewards replace flat awards. Tunnel courses preserve
+the 64-step steering sequences. Controls and their inertia are adapted to the
+mouse, rather than reproducing the original mode-7 GPU implementation.
 
 The music files remain original module bytes. `modnum=1` is title, 3/4 are bonus,
 and `webtunes` selects gameplay modules in 16-wave blocks (`lsr #4`, despite a
@@ -68,7 +76,11 @@ metadata stores lengths as 24:8 fixed point. The fetcher produces lossless
 period-derived values. Some preserved payload lengths differ from the old
 metadata (for example sample 02); the manifest records both sizes. Playback
 uses the available payload, never reads beyond it, and falls back to synthesis
-if files are missing. Jaguar mixer pitch/echo/priority behavior is adapted.
+if files are missing. Source periods/priorities are generated into
+`sample_data.hpp`. `sayex` uses periods 352/354; `zapson` uses 200/196;
+normal explosions vary over 128..383. The modern stereo mixer interpolates
+pitch, preserves announcement priorities under saturation, and adds a delayed
+one-up echo. This is not a cycle-accurate Jaguar DSP implementation.
 
 Original polygon vertices, faces and intensities are imported; modern RGB tints,
 blending, motion and glow replace the exact Jaguar CRY/polygon/GPU pipeline.
@@ -84,3 +96,19 @@ The full original source and executable toolchain are not vendored.
 
 `tests/campaign-test.cpp` reproduces all three cases and exercises the roster,
 source schedules, powerups, bonuses, late-campaign behavior and victory.
+
+## Raster assets
+
+`import_art.py` converts five original big-endian CRY sheets to alpha-masked BMP,
+keeping source and output hashes. `raster_data.hpp` preserves all three original
+font coordinate maps plus named sprite regions. Missing UI punctuation has a
+small procedural fallback. Unsupported source font rectangles are clipped safely.
+The CRY modifier values in `tools/cry_palette.json` are hardware table data from
+[Atari's Tom & Jerry reference manual, pp. 30–33](https://asterick.github.io/jag-docs/tom/color-cry.html).
+Blue is the reversed-cyan red table, including the manual's corrected 115/17
+entries. Intensity multiplication uses the hardware's eight-bit shift.
+
+The death sequence lasts 1.6 seconds with combat frozen. Source polygon faces
+scatter for an explosion, or a flipper carries the claw into the web. A smooth
+camera path returns to the same wave's starting rim before reloading it. Final
+life loss settles into Game Over without another camera discontinuity.

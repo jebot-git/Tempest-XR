@@ -1,0 +1,72 @@
+{
+  "source_commit": "8b50b467ce7dd7eee475aaf5ae86804d95401ae7",
+  "palette_reference": "https://asterick.github.io/jag-docs/tom/color-cry.html",
+  "atlases": [
+    {
+      "file": "pic.bmp",
+      "width": 320,
+      "height": 200,
+      "sha256": "05a38619479e217d9cef729c930b7786bde6973e80cbfcf8d9c6936e74f1ebcc",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/images/beasty3.cry",
+      "raw_sha256": "3632695fc1a7c6816783074b548337bbe93433684b2a87767b94e80779afbb31"
+    },
+    {
+      "file": "pic2.bmp",
+      "width": 320,
+      "height": 200,
+      "sha256": "27ae8c8e8b90a391bec30c5e9b52ebe1a60cbc977cc920250c6fe4825e1c5fa9",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/images/beasty4.cry",
+      "raw_sha256": "d93532e691b616dd7357e273c634a9fca74007597462eabf10974108663de50f"
+    },
+    {
+      "file": "pic4.bmp",
+      "width": 320,
+      "height": 128,
+      "sha256": "399e527953825ff05f41d2bb5e542962037cec2b6cdb3d1acf0bdf9b76721f34",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/images/beasty6.cry",
+      "raw_sha256": "ba3543b6ee978716b657a1d04178fc4f3fdb8d01848b53fa87970e665aff1da6"
+    },
+    {
+      "file": "pic5.bmp",
+      "width": 320,
+      "height": 200,
+      "sha256": "16245e90d6c34ced0e51f2951ea4515f8eb9b9cc547b225e149fecaf6e6debc5",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/images/beasty7.cry",
+      "raw_sha256": "b28fbdb8e6b753bccd5c70c945fbb89733d445dade820488d93b901591cf03ea"
+    },
+    {
+      "file": "pic6.bmp",
+      "width": 320,
+      "height": 200,
+      "sha256": "5a1ee54f83f1901d50f1a543d1b0eed7ec64aac25ea8d55f4f669a00ef8488fd",
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/images/beasty8.cry",
+      "raw_sha256": "38fb02aebee1428a509b46f36c8efe3ca0c7bed6f636a1625245da3858ec9fb7"
+    }
+  ],
+  "fonts": [
+    {
+      "name": "afont",
+      "atlas": "pic2",
+      "width": 15,
+      "height": 18,
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/afont.s",
+      "raw_sha256": "3975920aef6799607da4332ef649eccbcf3d116265fc2d5375e3ce1502c54eb7"
+    },
+    {
+      "name": "bfont",
+      "atlas": "pic6",
+      "width": 27,
+      "height": 31,
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/bfont.s",
+      "raw_sha256": "16f28df113d2f9755fb89551ad56151816eff73b7c54597426ede30d93bd5f5a"
+    },
+    {
+      "name": "cfont",
+      "atlas": "pic",
+      "width": 8,
+      "height": 8,
+      "source_url": "https://raw.githubusercontent.com/mwenge/tempest2k/8b50b467ce7dd7eee475aaf5ae86804d95401ae7/src/cfont.s",
+      "raw_sha256": "89f4a9c25d5c0aafff781a0ad9efc6360c6d25ac03d6804f3f1fe034ae40d119"
+    }
+  ]
+}
