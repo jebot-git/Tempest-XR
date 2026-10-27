@@ -332,7 +332,6 @@ void Game::destroy(Enemy &e, bool zap) {
         points = 250;
         break;
     case Kind::Pulsar:
-    case Kind::PulsarSpark:
         points = 200;
         break;
     case Kind::Mirror:
@@ -817,7 +816,7 @@ void Game::tick(float dt) {
     std::vector<Enemy> children;
     struct MotionFrame {
         float depth = 0, angleStart = 0, angleEnd = 0, arc = 0;
-        bool turning = false, turnBegan = false;
+        bool turning = false, turnBegan = false, sparkContact = false;
     };
     std::vector<MotionFrame> motion(enemies.size());
     // Complete movement before resolving impacts. Entity storage order must not
@@ -835,6 +834,15 @@ void Game::tick(float dt) {
             continue;
         if (e.kind == Kind::EnemyShot) {
             e.depth -= dt * .55f;
+            continue;
+        }
+        if (e.kind == Kind::PulsarSpark) {
+            // run_pspark: contact precedes bullets and propagation, regardless
+            // of the global pulse phase. Movement is deferred until after hits.
+            if (e.lane == lane && std::abs(e.depth) <= 2.f / 160) {
+                hit();
+                frame.sparkContact = deathTime > 0;
+            }
             continue;
         }
         int tableIndex = std::min(int(fz_stuff.size()) - 1, (level - 1) / 2);
@@ -901,14 +909,11 @@ void Game::tick(float dt) {
                 e.depth = std::max(.25f, e.depth);
         }
         if ((e.kind == Kind::Fuseball && e.flip > (e.rim ? .25f : .55f)) ||
-            (e.kind == Kind::PulsarSpark && e.flip > .16f) ||
             (e.kind == Kind::Adroid && e.rim && e.flip > .4f)) {
             int dir = e.kind == Kind::Fuseball ? directionTo(e.lane, lane) : e.direction;
             if (!web.closed && (e.lane + dir < 0 || e.lane + dir >= web.lanes())) {
                 e.direction = -e.direction;
                 dir = e.direction;
-                if (e.kind == Kind::PulsarSpark)
-                    e.dead = true;
             }
             e.lane = boundedLane(e.lane + dir);
             e.flip = 0;
@@ -951,7 +956,7 @@ void Game::tick(float dt) {
         for (size_t ei = 0; ei < enemies.size(); ++ei) {
             const auto &e = enemies[ei];
             const auto &frame = motion[ei];
-            if (e.dead || e.kind == Kind::Powerup ||
+            if (e.dead || e.kind == Kind::Powerup || frame.sparkContact ||
                 shot.lane != (frame.turnBegan ? e.turnFrom : e.lane))
                 continue;
             bool powered = boost && !shot.ally;
@@ -1065,6 +1070,19 @@ void Game::tick(float dt) {
             }
             continue;
         }
+        if (e.kind == Kind::PulsarSpark) {
+            if (frame.sparkContact)
+                continue;
+            e.sparkTime -= dt;
+            while (e.sparkTime <= .000001f) {
+                e.sparkTime += 5.f / 60; // prop_del=$0404: expire after five 60 Hz updates.
+                int next = e.lane + e.direction;
+                if (!web.closed && (next < 0 || next >= web.lanes()))
+                    e.direction = -e.direction;
+                e.lane = boundedLane(e.lane + e.direction);
+            }
+            continue;
+        }
         if (flipperKind(e.kind)) {
             bool catches =
                 frame.turning ? !shotVulnerable(e) && e.turnFrom == lane : e.rim && e.lane == lane;
@@ -1075,8 +1093,7 @@ void Game::tick(float dt) {
             }
             continue;
         }
-        if ((e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark) && pulseActive() &&
-            e.lane == lane)
+        if (e.kind == Kind::Pulsar && pulseActive() && e.lane == lane)
             hit();
         if (e.kind == Kind::Adroid && e.rim && std::fmod(e.age, 2.f) > .9f && e.lane == lane)
             hit();
@@ -1097,7 +1114,7 @@ void Game::tick(float dt) {
             e.rim = true;
             if (e.kind == Kind::Pulsar) {
                 for (int d : {-1, 1}) {
-                    auto spark = makeEnemy(Kind::PulsarSpark, boundedLane(e.lane + d), 0, d);
+                    auto spark = makeEnemy(Kind::PulsarSpark, e.lane, 0, d);
                     spark.rim = true;
                     children.push_back(spark);
                 }

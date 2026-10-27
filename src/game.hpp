@@ -69,7 +69,7 @@ struct Enemy {
     bool rim = false, dead = false;
     bool retreating = false;
     int hp = 1;
-    float firing = 0;
+    float firing = 0, sparkTime = 5.f / 60;
     FlipperMotion motion = FlipperMotion::Climbing;
     int turnFrom = -1;
     float turnAngle = 0, turnArc = 128, stopTime = 0;

@@ -235,3 +235,9 @@ present and are not counted as missing implementations.
    friendly or laser hit and award the source flipper score. Invented armor,
    reflected bullets and health pips were removed. Mirror/beast rules remain
    separate. Campaign assertions now check the corrected behavior.
+
+3. **Rim sparks implemented.** Contact precedes shots, open ends bounce, closed
+   webs wrap, and propagation uses the source five-frame counter. Splitting
+   pulsars place both sparks on the original lane with opposite directions.
+   Quiet-phase lethality, same-tick contact, jump protection and edge timing
+   have regressions; spark shot score follows `fkillme`.
