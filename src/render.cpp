@@ -572,18 +572,8 @@ void Renderer::world(const Game &g, bool headset) {
         flush();
         particleMessage(g);
         glPopMatrix();
-        if (headset) {
-            glPushMatrix();
-            glTranslatef(-1.8f, 2.2f, -3.8f);
-            glScalef(.007f, -.007f, .007f);
-            text(0, 0,
-                 g.bonusType == 1 ? "TUNNEL BONUS / WHEEL TO STEER"
-                                  : "BONUS / WHEEL X / LMB UP / RMB DOWN",
-                 1.5f, cyan);
-            text(0, 24, "GATES " + number(g.bonusHits) + " / " + number(g.bonusGateCount()), 1.5f,
-                 lime);
-            glPopMatrix();
-        }
+        if (headset)
+            headsetHud(g);
         return;
     }
     int n = g.web.lanes();
@@ -738,30 +728,75 @@ void Renderer::world(const Game &g, bool headset) {
     flush();
     particleMessage(g);
     glPopMatrix();
-    if (headset) {
-        // Small world-space instrument panels sit above/below the rim.
-        glDisable(GL_DEPTH_TEST);
-        glPushMatrix();
-        glTranslatef(-1.9f, 2.65f, -3.8f);
-        glScalef(.008f, -.008f, .008f);
-        text(0, 0, "SCORE " + number(g.score, 7), 2, white);
-        text(0, 24, "WEB " + number(g.level, 2) + " / " + g.web.name, 1.2f, cyan);
-        text(280, 0, "LIVES " + number(g.lives), 1.5f, lime);
-        glPopMatrix();
-        glPushMatrix();
-        glTranslatef(-1.9f, -2.45f, -3.8f);
-        glScalef(.006f, -.006f, .006f);
-        text(0, 0, "WHEEL MOVE / AUTO FIRE / RIGHT CLICK ZAP", 1.35f, cyan);
-        if (g.mode != Mode::Playing) {
-            std::string label = g.mode == Mode::Paused     ? "PAUSED - P TO RESUME"
-                                : g.mode == Mode::Menu     ? "LEFT CLICK TO START"
-                                : g.mode == Mode::GameOver ? "GAME OVER - CLICK TO RETRY"
-                                                           : "AVOID SPIKES / MIDDLE CLICK JUMP";
-            text(30, 25, label, 2, white);
-        }
-        glPopMatrix();
-    }
+    if (headset)
+        headsetHud(g);
 }
+std::vector<std::string> Renderer::xrHudLines(const Game &g) {
+    std::vector<std::string> result;
+    result.push_back("SCORE " + number(g.score, 7) + "   LIVES " + number(std::max(0, g.lives)));
+    result.push_back("WEB " + number(g.level, 2) + " / " + g.web.name + "   ZAP " + number(g.zaps));
+    std::string jump = "JUMP LOCKED / COLLECT POWERUPS";
+    if (g.jumpEnabled) {
+        if (g.jumpCooldown > 0) {
+            char timer[64];
+            std::snprintf(timer, sizeof(timer), "JUMP RECHARGING %.1fS", g.jumpCooldown);
+            jump = timer;
+        } else
+            jump = "JUMP READY / MIDDLE CLICK OR SPACE";
+    }
+    result.push_back(jump);
+    result.push_back("TOKENS " + number(g.bonusTokens) + "/3   POWERUP " +
+                     number(std::min(6, g.powerupStage)) + "/6");
+    result.push_back(std::string("LASER ") + (g.boost ? "ON" : "OFF") + "   DROID " +
+                     (g.droidActive ? "ON" : "OFF"));
+    if (g.mode == Mode::Menu) {
+        result.push_back("START WEB " + number(g.selectedLevel, 2) + " / UNLOCKED " +
+                         number(g.unlockedLevel, 2));
+        result.push_back("WHEEL SELECT / CLICK OR ENTER TO START");
+    } else if (g.mode == Mode::Victory) {
+        result.push_back("SUPERSTAR / CAMPAIGN COMPLETE");
+        result.push_back("CLICK OR ENTER TO PLAY AGAIN");
+    } else if (g.mode == Mode::GameOver) {
+        result.push_back("GAME OVER / CLICK OR ENTER TO RETRY");
+    } else {
+        if (g.isBonus()) {
+            result.push_back(std::string(g.bonusType == 1   ? "TUNNEL"
+                                         : g.bonusType == 2 ? "PSYCHEDELIC"
+                                                            : "RING") +
+                             " BONUS / GATES " + number(g.bonusHits) + "/" +
+                             number(g.bonusGateCount()));
+            char speed[80];
+            std::snprintf(speed, sizeof(speed), "SPEED %.2fX / BOOSTS %d / LAST +%d",
+                          g.bonusSpeed / (g.bonusType == 2 ? 37.5f : 30.f), g.bonusBoosts,
+                          g.bonusLastScore);
+            result.push_back(speed);
+        }
+        if (g.mode == Mode::Paused)
+            result.push_back("PAUSED / CLICK OR ENTER TO RESUME");
+        else if (g.isBonus())
+            result.push_back(g.bonusType == 1 ? "WHEEL TO STEER"
+                                              : "WHEEL X / HOLD LMB UP / RMB DOWN");
+        else if (g.mode == Mode::Transition)
+            result.push_back("WEB CLEAR / AVOID SPIKES / JUMP TO CLEAR");
+        else
+            result.push_back("WHEEL MOVE / RMB ZAP / MMB JUMP");
+    }
+    return result;
+}
+void Renderer::headsetHud(const Game &g) {
+    glDisable(GL_DEPTH_TEST);
+    glPushMatrix();
+    glTranslatef(-1.6f, 1.9f, -3.8f);
+    glScalef(.0055f, -.0055f, .0055f);
+    auto lines = xrHudLines(g);
+    for (size_t i = 0; i < lines.size(); ++i) {
+        // Inventory stays above the rim; mode/bonus prompts sit below it.
+        float y = i < 5 ? float(i) * 22 : 630 + float(i - 5) * 24;
+        text(0, y, lines[i], 1.4f, i < 2 ? white : i < 5 ? cyan : lime);
+    }
+    glPopMatrix();
+}
+
 void Renderer::desktop(const Game &g, int width, int height) {
     glViewport(0, 0, width, height);
     glClearColor(.006f, .009f, .025f, 1);

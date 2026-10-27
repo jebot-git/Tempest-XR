@@ -25,6 +25,38 @@ int main() {
             throw std::runtime_error(SDL_GetError());
         Renderer renderer;
         Game game;
+        Game status;
+        auto expectHud = [&](const std::string &fragment, bool present = true) {
+            auto lines = Renderer::xrHudLines(status);
+            bool found = std::any_of(lines.begin(), lines.end(), [&](const auto &line) {
+                return line.find(fragment) != std::string::npos;
+            });
+            if (found != present)
+                throw std::runtime_error("Incorrect XR status: " + fragment);
+        };
+        status.unlockedLevel = 17;
+        status.selectedLevel = 12;
+        expectHud("START WEB 12 / UNLOCKED 17");
+        status.start();
+        status.zaps = 1;
+        status.bonusTokens = 2;
+        expectHud("ZAP 1");
+        expectHud("TOKENS 2/3");
+        expectHud("JUMP LOCKED");
+        status.jumpEnabled = true;
+        expectHud("JUMP READY");
+        status.jumpCooldown = 1.5f;
+        expectHud("RECHARGING 1.5S");
+        status.boost = status.droidActive = true;
+        expectHud("LASER ON   DROID ON");
+        status.startBonus(2);
+        status.pause();
+        expectHud("PSYCHEDELIC BONUS");
+        expectHud("PAUSED / CLICK OR ENTER TO RESUME");
+        status.mode = Mode::Victory;
+        expectHud("CAMPAIGN COMPLETE");
+        expectHud("PLAY AGAIN");
+        expectHud("AVOID SPIKES", false);
         std::vector<unsigned char> pixels(512 * 512 * 3);
         auto render = [&](float yaw, float pitch) {
             glViewport(0, 0, 512, 512);
@@ -103,6 +135,9 @@ int main() {
                 game.tick(.1f);
                 render(0, 0);
             }
+            game.pause();
+            render(0, 0);
+            game.pause();
         }
         game.start(100);
         game.enemies.clear();
