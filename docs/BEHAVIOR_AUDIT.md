@@ -221,3 +221,12 @@ it matches. The different table embedded earlier under `romstart` is not the
 labeled runtime table used by `sweb`. Original sample-only audio, full-sphere
 XR stars, ship-following camera and the repaired basic rim timing are already
 present and are not counted as missing implementations.
+
+## Ordered implementation progress
+
+1. **Wave clearance implemented.** Generation completion now starts clearance
+   once every counted enemy/alien bullet is at or above the rim. Pickups and
+   spikes do not hold the wave open. Rim enemies survive into the flight; the
+   artificial 24-second expiry was removed. `original-behavior-regressions`
+   covers live rim enemies, down-web blockers, pickups and non-expiring enemies.
+   Earlier reproduced gaps above describe the evaluated revision, not this fix.

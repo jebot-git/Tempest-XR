@@ -905,8 +905,6 @@ void Game::tick(float dt) {
                     e.lane = boundedLane(e.lane + e.direction);
                     e.retreating = false;
                     e.depth = 1;
-                    if (e.age > 24)
-                        e.dead = true;
                 }
             }
             if (e.kind == Kind::Mirror)
@@ -1086,8 +1084,6 @@ void Game::tick(float dt) {
                 if (deathTime > 0 && snatched)
                     e.dead = true;
             }
-            if (e.rim && e.age > 24)
-                e.dead = true;
             continue;
         }
         if ((e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark) && pulseActive() &&
@@ -1121,8 +1117,6 @@ void Game::tick(float dt) {
             }
             if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane))
                 hit();
-            if (e.age > 24)
-                e.dead = true;
         }
     }
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [](auto &e) { return e.dead; }),
@@ -1133,9 +1127,13 @@ void Game::tick(float dt) {
     shots.erase(std::remove_if(shots.begin(), shots.end(),
                                [](auto &s) { return s.dead || s.depth > 1.05f; }),
                 shots.end());
-    bool remaining =
-        std::any_of(enemies.begin(), enemies.end(), [](auto &e) { return hostile(e.kind); });
-    if (mode == Mode::Playing && deathTime <= 0 && enemiesRemaining <= 0 && !remaining)
+    // r_end/szoom: after generation ends, leave as soon as the furthest
+    // counted enemy reaches the rim. Pickups/spikes do not hold the wave open;
+    // alien bullets do. Rim enemies need not be killed before clearance.
+    bool belowRim = std::any_of(enemies.begin(), enemies.end(), [](const auto &e) {
+        return !e.dead && e.kind != Kind::Powerup && e.depth > 0;
+    });
+    if (mode == Mode::Playing && deathTime <= 0 && enemiesRemaining <= 0 && !belowRim)
         completeWave();
 }
 } // namespace tempest
