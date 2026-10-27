@@ -13,7 +13,7 @@ constexpr float dt = 1.f / 120;
 static Game setup(int level = 1) {
     Game g(42);
     g.start(level);
-    g.autoFire = false;
+    g.fireHeld = false;
     g.invulnerable = 0;
     g.sounds.clear();
     return g;

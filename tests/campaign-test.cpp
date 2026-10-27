@@ -90,7 +90,7 @@ int main() {
         // Enemy bullets are shootable, including crossing between two ticks.
         for (int weapon = 0; weapon < 3; ++weapon) {
             g.start(9);
-            g.autoFire = false;
+            g.fireHeld = false;
             g.boost = weapon == 2;
             g.spawn(Kind::EnemyShot, 0, .5f);
             Shot shot{0, .48f, .48f};
@@ -102,7 +102,7 @@ int main() {
             CHECK(g.score == 0);
         }
         g.start(9);
-        g.autoFire = false;
+        g.fireHeld = false;
         g.spawn(Kind::EnemyShot, 1, .5f);
         g.shots = {{0, .48f, .48f}};
         g.tick(.02f);
@@ -112,7 +112,7 @@ int main() {
         // the starting rim of the same wave without spending a second life.
         for (auto kind : {Kind::Flipper, Kind::EnemyShot}) {
             g.start();
-            g.autoFire = false;
+            g.fireHeld = false;
             g.invulnerable = 0;
             g.steer(3);
             step(g, .3f);
@@ -143,7 +143,7 @@ int main() {
             CHECK(!g.jumpEnabled && !g.boost && !g.droidActive);
         }
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.invulnerable = 0;
         g.lives = 1;
         g.spawn(Kind::EnemyShot, g.lane, .0001f);
@@ -160,7 +160,7 @@ int main() {
              {std::pair{Kind::Tanker, Kind::Flipper}, std::pair{Kind::FuseTanker, Kind::Fuseball},
               std::pair{Kind::PulsarTanker, Kind::Pulsar}}) {
             g.start();
-            g.autoFire = false;
+            g.fireHeld = false;
             g.spawn(pair.first, 3, .6f);
             g.shots = {{3, .59f, .58f}};
             g.tick(.01f);
@@ -168,14 +168,14 @@ int main() {
             CHECK(count(g, pair.first) == 0);
         }
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.lane = 6;
         g.spawn(Kind::Fuseball, 0, .8f);
         step(g, 1.36f);
         CHECK(g.enemies[0].lane == 1);
         CHECK(g.enemies[0].depth < .8f);
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.invulnerable = 0;
         g.waveTime = 1.06f;
         g.spawn(Kind::Pulsar, g.lane, .8f);
@@ -183,13 +183,13 @@ int main() {
         g.tick(.01f);
         CHECK(g.lives == 2);
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.spawn(Kind::Pulsar, 0, .0001f);
         g.tick(.01f);
         CHECK(count(g, Kind::PulsarSpark) == 2);
         for (Kind kind : {Kind::SuperFlipper, Kind::SuperFlipper2, Kind::Mirror}) {
             g.start();
-            g.autoFire = false;
+            g.fireHeld = false;
             g.spawn(kind, 0, .6f);
             g.shots = {{0, .59f, .58f}};
             g.tick(.01f);
@@ -198,14 +198,14 @@ int main() {
             CHECK(g.score == (kind == Kind::Mirror ? 0 : 150));
         }
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.spawn(Kind::EnemyShot, g.lane, .001f);
         g.invulnerable = 0;
         g.tick(.01f);
         CHECK(g.lives == 2);
         CHECK(count(g, Kind::EnemyShot) == 0);
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.spawn(Kind::Flipper, 0, .7f);
         g.spawn(Kind::Fuseball, 1, .7f);
         g.spawn(Kind::Mirror, 2, .7f);
@@ -221,7 +221,7 @@ int main() {
         CHECK(g.zaps == 0);
         // Pickup order: laser, points, jump, points, friendly droid, token.
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.jump();
         CHECK(g.jumpTime == 0);
         pickup(g);
@@ -355,7 +355,7 @@ int main() {
         // Exercise every imported schedule until its exact generation budget is exhausted.
         for (int level = 1; level <= 100; level++) {
             g.start(level);
-            g.autoFire = false;
+            g.fireHeld = false;
             g.invulnerable = 100000;
             int frames = 0;
             while (g.mode == Mode::Playing && frames++ < 600 * 60) {

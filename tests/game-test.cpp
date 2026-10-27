@@ -27,6 +27,18 @@ int main() {
         REQUIRE(g.lane == 2);
         g.steer(-4);
         REQUIRE(g.lane == 14);
+        // Player fire follows the held button: no unattended fire, repeat while
+        // held, and no new shots after release (existing shots keep travelling).
+        g.start();
+        advance(g, .5f);
+        REQUIRE(g.shots.empty());
+        g.fireHeld = true;
+        advance(g, .2f);
+        auto fired = std::count(g.sounds.begin(), g.sounds.end(), Sound::Shot);
+        REQUIRE(fired >= 2);
+        g.fireHeld = false;
+        advance(g, .2f);
+        REQUIRE(std::count(g.sounds.begin(), g.sounds.end(), Sound::Shot) == fired);
         g.start(3);
         REQUIRE(!g.web.closed);
         REQUIRE(g.web.lanes() == 11);
@@ -36,7 +48,7 @@ int main() {
         g.steer(-32);
         REQUIRE(g.lane == 0);
         g.start();
-        g.autoFire = false;
+        g.fireHeld = false;
         g.enemies = {{Kind::Flipper, g.lane, .3f}};
         g.shots = {{g.lane, .29f, .28f}};
         g.tick(.01f);

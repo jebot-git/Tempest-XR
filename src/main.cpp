@@ -16,7 +16,7 @@
 using namespace tempest;
 struct Settings {
     float sensitivity = 1;
-    bool inverted = false, muted = false, autoFire = true;
+    bool inverted = false, muted = false;
     int best = 0, unlockedLevel = 1;
     float musicVolume = .9f, sfxVolume = .32f, voiceVolume = .9f;
 };
@@ -135,8 +135,8 @@ int main(int argc, char **argv) {
                        "[--no-audio] [--no-music] [--music-dir DIR]\n       [--demo] [--warp-demo] "
                        "[--effects-demo] [--enemy-demo] [--bonus-demo 0..2] [--frames N] "
                        "[--death-demo 0..1] [--capture image.ppm] [--report diagnostics.json] "
-                       "[--smoke-test image.ppm]\n\nWheel: move | LMB: fire | RMB: Superzapper | "
-                       "MMB/Space: jump\nEnter: start/retry | P/Esc: pause | F: automatic fire | "
+                       "[--smoke-test image.ppm]\n\nWheel: move | LMB: hold to fire | RMB: Superzapper | "
+                       "MMB/Space: jump\nEnter: start/retry | P/Esc: pause | "
                        "V: toggle OpenXR\nB: half-SBS preview | R: recenter XR | F11: "
                        "fullscreen\n[/]: sensitivity | I: invert wheel | M: mute | N: next music "
                        "track preview | Ctrl+Q: quit\n"
@@ -182,8 +182,10 @@ int main(int argc, char **argv) {
         auto path = configPath();
         if (!frameLimit) {
             std::ifstream file(path);
-            file >> settings.sensitivity >> settings.inverted >> settings.muted >>
-                settings.autoFire >> settings.best;
+            // Keep the old autofire field as an ignored compatibility slot.
+            bool legacyAutoFire = false;
+            file >> settings.sensitivity >> settings.inverted >> settings.muted >> legacyAutoFire >>
+                settings.best;
             if (!(file >> settings.unlockedLevel))
                 settings.unlockedLevel = 1;
             settings.unlockedLevel = std::clamp(settings.unlockedLevel, 1, 100);
@@ -205,7 +207,6 @@ int main(int argc, char **argv) {
             settings.voiceVolume = voiceVolume;
         Game game;
         game.best = settings.best;
-        game.autoFire = settings.autoFire;
         game.unlockedLevel = settings.unlockedLevel;
         game.selectedLevel = explicitLevel ? startingLevel : settings.unlockedLevel;
         Renderer renderer;
@@ -293,19 +294,21 @@ int main(int argc, char **argv) {
         SDL_GL_SetSwapInterval(frameLimit ? 0 : 1);
         if (wantXR)
             toggleXR();
-        if (demo || smoke || warpDemo)
+        if (demo || smoke || warpDemo) {
             game.start(startingLevel);
+            game.fireHeld = demo || smoke;
+        }
         if (enemyDemo) {
             game.start(explicitLevel ? startingLevel : 33);
             game.enemiesRemaining = 0;
-            game.autoFire = false;
+            game.fireHeld = false;
             for (int type = 0; type < 12; type++)
                 game.spawn(Game::kindForSource(type), type % game.web.lanes(),
                            .65f + float(type % 3) * .1f);
         }
         if (deathDemo >= 0) {
             game.start(startingLevel);
-            game.autoFire = false;
+            game.fireHeld = false;
             game.invulnerable = 0;
             game.spawn(deathDemo ? Kind::Flipper : Kind::EnemyShot, game.lane, .0001f);
         }
@@ -333,7 +336,7 @@ int main(int argc, char **argv) {
                 return;
             }
             file << settings.sensitivity << ' ' << settings.inverted << ' ' << settings.muted << ' '
-                 << game.autoFire << ' ' << game.best << ' ' << game.unlockedLevel << ' '
+                 << 0 << ' ' << game.best << ' ' << game.unlockedLevel << ' '
                  << settings.musicVolume << ' ' << settings.sfxVolume << ' ' << settings.voiceVolume
                  << '\n';
             file.close();
@@ -457,8 +460,6 @@ int main(int argc, char **argv) {
                         game.jump();
                     if (key == SDLK_z)
                         game.zap();
-                    if (key == SDLK_f)
-                        game.autoFire = !game.autoFire;
                     if (key == SDLK_i)
                         settings.inverted = !settings.inverted;
                     if (key == SDLK_LEFTBRACKET)
@@ -516,6 +517,7 @@ int main(int argc, char **argv) {
                 }
             }
             if (demo && game.mode == Mode::Playing) {
+                game.fireHeld = true; // Attract/demo input, matching the source's auto branch.
                 const Enemy *target = nullptr;
                 for (auto &e : game.enemies)
                     if (e.kind != Kind::Powerup && (!target || e.depth < target->depth))
@@ -530,8 +532,10 @@ int main(int argc, char **argv) {
             if (smoke && frame == 135)
                 game.zap();
             if (effectsDemo) {
-                if (frame == 5)
+                if (frame == 5) {
                     game.start(startingLevel);
+                    game.fireHeld = true; // Scripted firing for the effects fixture.
+                }
                 if (frame == 20)
                     game.steer(3);
                 if (frame == 40)

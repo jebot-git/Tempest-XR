@@ -31,19 +31,18 @@ bundled-experience staging builds a pinned Release revision of this project.
 
 ## Controls
 
-Automatic fire starts enabled, so basic play needs only the wheel. Fractional
-wheel input accumulates; closed webs wrap, and open webs stop at their ends.
+Hold LMB to fire and use the wheel to steer. Fractional wheel input accumulates;
+closed webs wrap, and open webs stop at their ends.
 
 | Input | Action |
 |---|---|
 | Wheel | Move on rim; select an unlocked starting web on the title screen |
-| Left mouse | Start in XR/SBS; fire when automatic fire is off |
+| Left mouse | Start in XR/SBS; hold to fire repeatedly |
 | Right mouse / Z | Superzapper: first use clears enemies, second kills one |
 | Middle mouse / Space | Jump after collecting the jump powerup |
 | Left/Right or A/D | Alternative steering / starting-web selection |
 | Enter | Start/retry; start a new campaign after victory |
 | P / Escape | Pause/resume; Escape returns game-over/victory to title |
-| F | Toggle automatic fire |
 | V | Enter native OpenXR / return the game to desktop |
 | Alt+Tab | Pause native XR and restore the previous DomeD desktop |
 | Click / Enter while paused | Resume play after returning to the game |
@@ -58,6 +57,9 @@ wheel input accumulates; closed webs wrap, and open webs stop at their ends.
 | F6/F7 | Recorded voice volume down/up |
 | F11 | Fullscreen |
 | Ctrl+Q | Quit |
+
+Normal firing requires holding LMB. Releasing it stops new shots. There is no
+hands-free autofire toggle; older saved autofire preferences are ignored.
 
 In ring and psychedelic bonus stages, the **wheel controls X**, **holding left
 mouse or Up/W moves up**, and **holding right mouse or Down/S moves down**. In the tunnel bonus,

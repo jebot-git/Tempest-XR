@@ -1218,14 +1218,13 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
         text(48, 829, "WHEEL", 1.6f, white);
         text(116, 829, "MOVE", 1.6f, {.4f, .54f, .68f});
         text(242, 829, "LMB", 1.6f, white);
-        text(291, 829, g.autoFire ? "AUTO FIRE ON" : "HOLD TO FIRE", 1.6f, {.4f, .54f, .68f});
+        text(291, 829, "HOLD TO FIRE", 1.6f, {.4f, .54f, .68f});
         text(511, 829, "RMB", 1.6f, pink);
         text(559, 829, "SUPERZAPPER", 1.6f, {.4f, .54f, .68f});
         text(771, 829, "MMB / SPACE", 1.6f, white);
         text(957, 829, "JUMP", 1.6f, {.4f, .54f, .68f});
     }
-    text(48, 869, "P PAUSE   F AUTO FIRE   V XR   B STEREO   F11 FULLSCREEN", 1.25f,
-         {.35f, .46f, .61f});
+    text(48, 869, "P PAUSE   V XR   B STEREO   F11 FULLSCREEN", 1.25f, {.35f, .46f, .61f});
     char settings[160];
     std::snprintf(settings, sizeof(settings), "[ / ] WHEEL %.2f  I %s  M %s", sensitivity,
                   inverted ? "REVERSED" : "NORMAL", muted ? "MUTED" : "AUDIO");

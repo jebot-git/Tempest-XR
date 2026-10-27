@@ -108,3 +108,11 @@ older eight suites passing. Those six ordered items now have implementations
 and dedicated regressions. The old campaign assertion protecting super-flipper
 armor/reflection was replaced. The original quiet-phase spark audit error and
 unused tunnel speed-ramp counter were also corrected against executable source.
+
+The held-LMB follow-up passes the same eleven OpenXR and ten desktop suites,
+including idle/held/released firing behavior. A private Xvfb input check loaded
+five-, six- and nine-field settings with autofire previously enabled, pressed F,
+and quit: all saved the reserved flag as zero while retaining scores, unlocked
+progress and volumes. The seven isolated native XR scenarios also passed again.
+The source-fidelity probes and remaining uncovered cases are recorded in the
+post-implementation evaluation in BEHAVIOR_AUDIT.md.

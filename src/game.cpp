@@ -873,8 +873,7 @@ void Game::tick(float dt) {
                                     [](const auto &e) { return !e.dead && reflected(e.kind); }));
     };
     fireTimer -= dt;
-    if ((autoFire || fireHeld) && fireTimer <= .000001f &&
-        shotSlots() < size_t(droidActive ? 16 : 8)) {
+    if (fireHeld && fireTimer <= .000001f && shotSlots() < size_t(droidActive ? 16 : 8)) {
         shots.push_back({lane, -jumpLift() / 9});
         fireTimer = float(boost ? 3 : 4) / 60;
         sounds.push_back(boost ? Sound::PoweredShot : Sound::Shot);

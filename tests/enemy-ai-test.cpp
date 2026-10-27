@@ -12,7 +12,7 @@ constexpr float dt = 1.f / 120;
 static Game setup(int level = 1) {
     Game g(42);
     g.start(level);
-    g.autoFire = false;
+    g.fireHeld = false;
     g.invulnerable = 1000;
     g.enemiesRemaining =
         1000; // Keep generation unfinished; short tests precede first scheduled spawn.
@@ -334,7 +334,7 @@ int main() {
             auto g = setup();
             for (int i = 0; i < 8; ++i)
                 g.spawn(Kind::MirrorShot, 3, .5f);
-            g.autoFire = true;
+            g.fireHeld = true;
             step(g, 1);
             CHECK(g.shots.empty()); // Reflections still occupy their original shot entitlement.
             g.droidActive = true;
@@ -392,7 +392,7 @@ int main() {
         }
         {
             auto g = setup();
-            g.autoFire = true;
+            g.fireHeld = true;
             step(g, 16);
             CHECK(g.shots.size() == 2);
             CHECK(std::abs(g.shots[0].depth - g.shotSpeed() * 16 / 120) < .00001f);

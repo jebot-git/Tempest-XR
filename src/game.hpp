@@ -178,7 +178,7 @@ class Game {
         bonusesPlayed = 0;
     double waveTime = 0;
     float time = 0, visualLane = 0, jumpTime = 0, jumpCooldown = 0, invulnerable = 0, flash = 0;
-    bool autoFire = true, fireHeld = false, boost = false;
+    bool fireHeld = false, boost = false;
     bool jumpEnabled = false, droidActive = false, bonusUp = false, bonusDown = false,
          bonusWon = false, bonusFinished = false;
     bool droidPending = false, earlyDroid = false;

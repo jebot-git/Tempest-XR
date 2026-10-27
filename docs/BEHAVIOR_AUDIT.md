@@ -25,7 +25,9 @@ First-run ring distances account for 60 Hz countdown granularity. The original `
 
 ## Remaining gameplay differences
 
-These are actionable fidelity gaps, not defects proven absent by tests.
+These are actionable fidelity gaps, not defects proven absent by tests. The
+[post-implementation evaluation](#post-implementation-evaluation-at-8a47fb9)
+below adds reproduced boundary failures to the major-state translations in this table.
 
 | Area | Original behavior | Current behavior / gap |
 |---|---|---|
@@ -152,7 +154,7 @@ The 27 `solids` slots include no-op, flipper, three tankers, shot, fuseball, pul
 | Explosions / messages | Original bitmap breakup, colored pixels, mesh fragments, score bursts | Modern random spread/lifetimes and generic debris replace individual source handlers |
 | Zapper / jump / warp | Arcs, flashes, trails, rainbow beam rings, continuous next-web tunnel | XR distances/durations/camera constraints are intentional additions; source flicker/slowdown and exact color timing remain different |
 | Attract mode / tutorials / credits | Modern title and optional autoplay demo | Missing original cycling demos, enemy demonstrations, tutorial pages, credits and full title sequence |
-| Original options | Modern wheel/audio/autofire settings and unlocked web selection | Missing entity/player selection, permanent droid-start option, original controller mapping, tune lock and full option screens |
+| Original options | Modern wheel/audio settings, held-LMB firing and unlocked web selection | Missing entity/player selection, permanent droid-start option, original controller mapping, tune lock and full option screens |
 | Classic / Plus / cooperative / H2H | No playable implementation | Separate source game variants are out of current scope |
 | High scores / EEPROM (`eeprim.s`) | Best score, unlocked web and preferences saved to SDL path | No initials/table, EEPROM-compatible records, keys/password/tag algorithms, original start-bonus restoration |
 | Display/input timing | Fixed 120 Hz simulation with render-independent time | No PAL/NTSC interrupt timing, original rotary acceleration or original object-pool ordering |
@@ -302,3 +304,101 @@ present and are not counted as missing implementations.
    Full source object allocation/reservations, friendly-droid patrol and separate
    shot entitlement remain outstanding. The existing 120 Hz swept impact
    framework remains an adaptation of the Jaguar's object-list update ordering.
+
+## Post-implementation evaluation at 8a47fb9
+
+The six ordered changes implement the main systems, but do not complete every
+source behavior. All eleven existing CTest suites pass at this revision. A
+separate controlled probe found the following cases outside their coverage.
+The probe uses public Game/Enemy state, 120 Hz ticks (or one 60 Hz source step
+where stated), and the same pinned Jaguar source. It is not an emulator trace.
+Local reproduction files are `artifacts/stage-audit-probe.cpp` and
+`artifacts/stage-audit-probe.log`.
+
+| Order / priority | Finding and observed result | Source evidence / required follow-up |
+|---|---|---|
+| 1 / P1 | **Beast loses its shield on the rim-entry frame.** At depth .1, a normal hit leaves the beast and one reflected part. At depth .0001, the same valid hit kills a fresh three-stage beast for 150 without shedding a part. | `beastrail` (11047) tests `mcollie` before moving. Current `Game::tick` moves first and tests the resulting `e.motion` (game.cpp:1143); a newly started turn also rewrites it to Stopped. Resolve damage using the collision-time rail state, preserving staged reflections and final-hit bullet handling. |
+| 2 / P1 | **Hostile-droid shielding is lost on its top-crossing frame.** A hit at depth -.08 knocks it to .045 and leaves Climbing. A hit at -.0937 knocks it to .0313 but leaves Starting, so it patrols down-web without its climb shield. | `uppweb` (10897) checks the hit first and returns after knockback. `tickSpecialEnemy` changes the phase/rim flag before `Game::tick` restores depth. Keep the pre-hit climb state when a shield hit cancels the upward move. |
+| 3 / P1 | **Source enemy entry is missing; generation timing still differs.** A freshly spawned bottom-of-web pulsar during phase seven immediately costs a life. The original initially collapses most generated enemies to distant pixels, with pulsars waiting for a safe phase before activation. Also, unobstructed wave-one launches occur at 120 Hz ticks 121/361/601/841 instead of the source-counter equivalents 122/364/606/848. | `ipix` (11000) adds 300 source units and negates the draw mode. `run_objects` (16233–16252) advances by two units per source frame and only activates pulsars below phase three. `setnewgen`/`newgen` (17771/17807) use integer half-periods and signed-negative counter expiry; the current float timers omit the extra frame. Add explicit entry/activation state and source countdowns alongside pool/backpressure work. |
+| 4 / P1 | **Bonus-token clearing bypasses zap immunity.** Ordinary zap leaves a mirror, mirror reflection and climbing hostile droid alive; collecting a token deletes all three. | `sprzap` (10728) enables the same `szap_on` path, rather than directly deleting every enemy. `collectPowerup` case 5 uses its own unconditional destroy loop (game.cpp:526). Route both through the same eligibility and source-paced zap mechanism. |
+| 5 / P1 | **Shot ownership and source object allocation remain incomplete.** With a friendly droid active and eight live player shots, pressing Fire creates a ninth player shot. | `shots` is initialized as two counters (24146); `sclawr` consumes the player counter and `rundroid` (9191) consumes `shots+2`. `adenoid` expands the collision table, not the player's entitlement. Current 16-total sharing allows either side to consume the other's allowance. `afree`, `noclog`, three-slot tanker reservations and spike/debris allocations are also absent. |
+| 6 / P2 | **Fuseball snaps inward at the right edge of an open web.** The last crossing step on PLANE moves .275625 m and finishes .294 m from its intended outer endpoint. The circular-web control finishes exactly at its endpoint. | `crossrail` (12363–12409) preserves the arrived XY coordinates when the unconnected right edge returns before `crail0`. Current completion clamps the lane and `enemyPosition` reconstructs the left rail. Preserve the actual rail endpoint independently of the collision lane, including subsequent motion. |
+| 7 / P2 | **Tunnel wrap boundary is still one phase unit wrong.** Track byte 223 / player phase 0 is accepted, although the source computes distance 33 and rejects it. | `tundraw` negates both stored track and player phases before `xono/xono2` (4238–4265). `tunnelOnTrack` translates the 255-distance wrap but omits those negations. Test the complete 256-by-256 phase matrix against a literal source reference, rather than only track-zero boundaries. |
+| 8 / P2 | **Surviving enemies freeze during clearance.** A retained rim flipper has age .008333 both on entering clearance and one second later; its turn state also stops updating. | `zoom1`/`nofire` and `zoom2` (14112/13298/14136) continue `run_objects` during relevant flight phases, suppressing inappropriate attacks through the wave state. Current Transition returns after pickups/camera/spike checks (game.cpp:817). Continue appropriate enemy/effect animation while preserving clearance safety and camera continuity. |
+
+The launch-tick comparison counts from the first unobstructed generator update,
+using 60 Hz source timing mapped to 120 Hz. It compares dispatch timing; the
+missing distant-pixel entry delays active appearance further. Existing campaign
+tests verify imported budgets and periods, but do not enforce these launch
+boundaries, original capacity stalls or safe pulsar activation. Existing enemy
+regressions cover representative phases, but omit the simultaneous hit/phase
+transitions above. The tunnel tests currently protect the incomplete wrap rule.
+
+### Other remaining implementations
+
+- **Friendly droid:** source 16-step pursuit, halfway lane changes, independent
+  firing counter/cadence and slot ownership; its temporary lifetime is corrected.
+- **Pickups/scoring:** rez/travel/collection feedback, the rare `suprise` infinite
+  zap/early-exit branch (10628), selected-start rewards, all score contexts,
+  removal of the invented 1,000-point clearance award, and the One Up holiday/
+  web-color state. Existing campaign assertions still enforce that clearance
+  award; passing them is not evidence that it matches the original.
+- **Special effects:** individual `changex`/`run_prex`/`xshot`/sphere lifecycles,
+  source firework command sequencing and gravity/expiry (`run_fw`, 16145), ring/
+  psychedelic victory pyramids, exact melt/feedback triggers and color timing.
+  Imported art, pixel breakup, meshes, trails and feedback cover the main visual
+  families but are not a full effect-by-effect port.
+- **Audio:** music selection and original sample-only voices work. `domod`
+  (14683) fades the old module and waits for its counter; `Music::load` currently
+  replaces it immediately and fades in. Several destruction/impact contexts
+  still use a generic cue.
+- **Campaign/frontend:** the original completion/Beastly handoff, score initials/
+  table, EEPROM keys, attract/tutorial/credits sequence, original option flows
+  and optional Classic/Plus/cooperative/H2H modes. The source's `sweb0` completion
+  threshold also differs from the recreation's modern wave-100 victory.
+- **XR validation:** ship-follow camera, full-sphere stars, warp flight and
+  simulated runtime integration are present. Physical headset/WiVRn tracking,
+  performance and comfort have not been validated; original integer projection
+  is intentionally adapted to XR meters.
+
+Recommended order: repair the hit/state and zap paths first, then entry/
+countdown/pool/shot ownership, then the three geometric/animation boundary
+cases, and finally the remaining effects, progression and frontend flows.
+
+### Original autofire and requested control change
+
+The preserved Jaguar source supports **repeating fire while the button is
+held**, not an ordinary hands-free toggle. `claw_con1` (13409) goes directly to
+`sclawr` when `auto` is zero. `sclawr` (13437–13455) checks `fire_1 & pad_now`
+before decrementing its firing timer and consuming a shot. The `auto` branch
+injects fire/movement specifically for attract/demo play. No normal-play
+hands-free autofire setting was found in this source.
+
+At the user's request, the recreation's default-on autofire state, F toggle and
+HUD/help entry were removed after this evaluation. Player fire now requires
+held LMB; release stops new shots. Old preference formats retain their field
+positions, but their autofire value is ignored and saved as zero. Scripted
+attract/effects fixtures inject held-fire input explicitly. The unrelated
+findings above remain open.
+
+### Clearance warning and its background
+
+The original does show `avoid the spikes` during clearance. `szoom` (16311–
+16325) sets it only for `cwave` 3 through 15 inclusive (displayed waves 4–16),
+and skips it after the `outah` early-exit cheat. It sets `msgtim1=250`; the
+normal message machinery subsequently has its second scaling/motion phase.
+
+There is **no opaque rectangular message panel** on this source path.
+`drawmsg` (14756) invokes `text_setup` and the `texter` GPU program directly.
+`text_setup` selects mode zero and zero drop-shadow offsets; `stoat.gas`
+initializes the comparison pattern to zero and uses the transparent glyph
+blit path. `drawmsg` adds animated shear and the message controller changes
+scale/motion. This should not be confused with a solid black text card.
+
+The recreation instead draws a nearly opaque dark rectangle in desktop
+Transition HUD (render.cpp:1257), with `WEB CLEAR` and `AVOID SPIKES / JUMP TO
+CLEAR` on every wave. The headset text is also unconditional, although it
+has no corresponding centered desktop card. The rectangle, universal warning
+and jump wording are modern additions. Correcting their scope/presentation
+remains an evaluation finding; the requested autofire removal does not change
+that UI.

@@ -137,7 +137,7 @@ int main() {
         for (int level : {9, 17, 100}) {
             game.start(level);
             game.enemiesRemaining = 0;
-            game.autoFire = false;
+            game.fireHeld = false;
             for (int type = 0; type < 12; type++)
                 game.spawn(Game::kindForSource(type), type % game.web.lanes(), .4f);
             game.spawn(Kind::MirrorShot, 0, .3f);
@@ -164,7 +164,7 @@ int main() {
         // Actual pivoted rim turns on flat, circular and concave webs.
         for (int level : {1, 3, 10}) {
             game.start(level);
-            game.autoFire = false;
+            game.fireHeld = false;
             game.invulnerable = 100;
             Enemy flipper{Kind::Flipper, game.boundedLane(game.lane - 1), 0};
             flipper.rim = true;
@@ -182,7 +182,7 @@ int main() {
         render(0, 0);
         for (auto kind : {Kind::Flipper, Kind::EnemyShot}) {
             game.start();
-            game.autoFire = false;
+            game.fireHeld = false;
             game.invulnerable = 0;
             game.spawn(kind, game.lane, .0001f);
             for (int i = 0; i < 190; ++i) {
