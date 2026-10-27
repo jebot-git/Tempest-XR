@@ -7,23 +7,31 @@ namespace tempest {
 class Audio {
     friend struct AudioProbe;
     struct Voice {
-        float phase = 0, remaining = 0, duration = 0;
+        float remaining = 0;
+        bool loop = false;
         Sound sound = Sound::Shot;
         int sample = -1;
         double position = 0;
-        float step = 1, gain = 1, pan = 0, delay = 0;
+        float step = 1, gain = 1, pan = 0;
+        double loopStart = 0, loopEnd = 0;
         int priority = 0;
         uint64_t serial = 0;
     };
     SDL_AudioDeviceID device = 0;
-    std::array<Voice, 32> voices{};
+    std::array<Voice, 6> voices{};
     std::array<std::vector<float>, 30> effectSamples;
+    std::array<double, 30> loopStarts{}, loopEnds{};
+    size_t effectChannels = 6;
+    float musicVolume = .9f, effectsVolume = .32f, voiceVolume = .9f, duck = 0;
     uint64_t samples = 0;
     bool muted = false;
     bool suspended = false;
     Mode audioMode = Mode::Menu;
     Music music;
     std::string musicDirectory, currentTrack;
+    std::string failedTrack;
+    uint64_t retryMusicAt = 0;
+    int musicContext = -1;
     bool manuallySelected = false;
     int manualTrack = -1;
     int gatePeriod = 512;
@@ -40,5 +48,7 @@ class Audio {
     void updateMusic(const Game &game, bool suspended = false);
     void nextTrack();
     void setSampleDirectory(const std::string &directory);
+    void setVolumes(float music, float effects, float voice);
+    std::string musicStatus() const;
 };
 } // namespace tempest

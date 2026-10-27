@@ -612,8 +612,9 @@ void Renderer::particleMessage(const Game &g, bool headset) {
         return;
     float pixel = rect ? .009f : .0075f;
     float width = rect ? rect->width * pixel : float(g.message.size() * (font.width + 1)) * pixel;
-    Vec3 origin = (headset || g.isBonus() ? g.shipPosition() : Vec3{0, 0, -3.8f}) +
-                  Vec3{-width * .5f, .6f, 1.1f};
+    Vec3 origin =
+        (headset || g.isBonus() || g.isBonusReturn() ? g.shipPosition() : Vec3{0, 0, -3.8f}) +
+        Vec3{-width * .5f, .6f, 1.1f};
     glPushAttrib(GL_ENABLE_BIT | GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT | GL_CURRENT_BIT);
     glDisable(GL_TEXTURE_2D);
     glEnable(GL_BLEND);
@@ -795,7 +796,7 @@ void Renderer::world(const Game &g, bool headset) {
         flush();
     }
     glPushMatrix();
-    if (headset || g.isBonus()) {
+    if (headset || g.isBonus() || g.isBonusReturn()) {
         auto camera = g.xrCameraPosition();
         glTranslatef(-camera.x, -camera.y, -camera.z);
     }
@@ -1024,8 +1025,10 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
         }
         if (g.mode == Mode::Paused)
             result.push_back("PAUSED / CLICK OR ENTER TO RESUME");
+        else if (g.isBonusReturn())
+            result.push_back("RETURNING TO WEB");
         else if (g.isBonus())
-            result.push_back(g.bonusType == 1 ? "WHEEL TO STEER"
+            result.push_back(g.bonusType == 1 ? "WHEEL / LEFT / RIGHT TO ROTATE"
                                               : "WHEEL X / HOLD LMB UP / RMB DOWN");
         else if (g.deathTime > 0)
             result.push_back(g.snatched ? "SHIP CAPTURED / RETURNING TO WEB"
@@ -1035,7 +1038,26 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
         else
             result.push_back("WHEEL MOVE / RMB ZAP / MMB JUMP");
     }
+    if (g.isBonus()) {
+        auto instructions = bonusInstructions(g);
+        result.insert(result.end(), instructions.begin(), instructions.end());
+    }
     return result;
+}
+std::vector<std::string> Renderer::bonusInstructions(const Game &g) {
+    if (!g.isBonus() || g.bonusFinished)
+        return {};
+    if (g.bonusType == 1 && g.bonusGate > 0 && g.mode != Mode::Paused)
+        return {"WHEEL / LEFT / RIGHT / A / D: ROTATE"};
+    if (g.bonusType == 1)
+        return {"ROTATE CROSSHAIR THROUGH EVERY OPENING", "WHEEL OR LEFT / RIGHT / A / D",
+                "MISSING ONE ENDS BONUS / COMPLETE TO WARP"};
+    if (g.bonusGate > 0 && g.mode != Mode::Paused)
+        return {"LMB / UP / W: UP    RMB / DOWN / S: DOWN"};
+    return {"AIM CROSSHAIR THROUGH EACH RING / MISSING ENDS BONUS",
+            "WHEEL / LEFT / RIGHT: HORIZONTAL", "HOLD LMB / UP / W: UP    RMB / DOWN / S: DOWN",
+            "ARROWS PUSH UP / DOWN / BOLTS BOOST SPEED",
+            "CENTRE HITS SCORE MORE / COMPLETE FOR +20000"};
 }
 void Renderer::headsetHud(const Game &g) {
     glDisable(GL_DEPTH_TEST);
@@ -1043,9 +1065,13 @@ void Renderer::headsetHud(const Game &g) {
     glTranslatef(-1.6f, 1.9f, -3.8f);
     glScalef(.0055f, -.0055f, .0055f);
     auto lines = xrHudLines(g);
+    auto instructions = bonusInstructions(g);
+    size_t instructionStart = lines.size() - instructions.size();
     for (size_t i = 0; i < lines.size(); ++i) {
         // Inventory stays above the rim; mode/bonus prompts sit below it.
-        float y = i < 5 ? float(i) * 22 : 630 + float(i - 5) * 24;
+        float y = i < 5                   ? float(i) * 22
+                  : i >= instructionStart ? 200 + float(i - instructionStart) * 24
+                                          : 630 + float(i - 5) * 24;
         text(0, y, lines[i], 1.4f, i < 2 ? white : i < 5 ? cyan : lime);
     }
     glPopMatrix();
@@ -1093,14 +1119,21 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
     text(1040, 55, "LIVES " + number(std::max(0, g.lives)) + "  ZAP " + number(g.zaps), 2, lime);
     rect(0, 803, 1440, 97, {.015f, .025f, .055f, .95f});
     rect(48, 802, 1344, 1, {.2f, .5f, .65f, .3f});
-    text(48, 829, "WHEEL", 1.6f, white);
-    text(116, 829, "MOVE", 1.6f, {.4f, .54f, .68f});
-    text(242, 829, "LMB", 1.6f, white);
-    text(291, 829, g.autoFire ? "AUTO FIRE ON" : "HOLD TO FIRE", 1.6f, {.4f, .54f, .68f});
-    text(511, 829, "RMB", 1.6f, pink);
-    text(559, 829, "SUPERZAPPER", 1.6f, {.4f, .54f, .68f});
-    text(771, 829, "MMB / SPACE", 1.6f, white);
-    text(957, 829, "JUMP", 1.6f, {.4f, .54f, .68f});
+    if (g.isBonus()) {
+        text(48, 829,
+             g.bonusType == 1 ? "WHEEL / LEFT / RIGHT: ROTATE THROUGH OPENINGS"
+                              : "WHEEL: X   HOLD LMB / UP / W: UP   RMB / DOWN / S: DOWN",
+             1.6f, cyan);
+    } else {
+        text(48, 829, "WHEEL", 1.6f, white);
+        text(116, 829, "MOVE", 1.6f, {.4f, .54f, .68f});
+        text(242, 829, "LMB", 1.6f, white);
+        text(291, 829, g.autoFire ? "AUTO FIRE ON" : "HOLD TO FIRE", 1.6f, {.4f, .54f, .68f});
+        text(511, 829, "RMB", 1.6f, pink);
+        text(559, 829, "SUPERZAPPER", 1.6f, {.4f, .54f, .68f});
+        text(771, 829, "MMB / SPACE", 1.6f, white);
+        text(957, 829, "JUMP", 1.6f, {.4f, .54f, .68f});
+    }
     text(48, 869, "P PAUSE   F AUTO FIRE   V XR   B STEREO   F11 FULLSCREEN", 1.25f,
          {.35f, .46f, .61f});
     char settings[160];
@@ -1108,11 +1141,11 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
                   inverted ? "REVERSED" : "NORMAL", muted ? "MUTED" : "AUDIO");
     text(823, 869, settings, 1.1f, {.35f, .46f, .61f});
     text(48, 123, status, 1.25f, {.35f, .56f, .65f});
-    if (g.isBonus())
-        text(48, 153,
-             g.bonusType == 1 ? "TUNNEL BONUS / WHEEL TO STEER"
-                              : "BONUS: WHEEL MOVES X / HOLD LEFT CLICK UP / RIGHT CLICK DOWN",
-             1.5f, amber);
+    if (g.isBonus()) {
+        auto instructions = bonusInstructions(g);
+        for (size_t i = 0; i < instructions.size(); ++i)
+            text(48, 153 + float(i) * 23, instructions[i], 1.5f, amber);
+    }
     if (g.mode == Mode::Menu) {
         rect(28, 171, 585, 584, {.006f, .012f, .032f, .9f});
         rect(48, 191, 4, 31, cyan);
@@ -1152,18 +1185,28 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
                                                          : "AVOID SPIKES / JUMP TO CLEAR";
             text(720 - float(sub.size()) * 6 * 1.8f / 2, rasterTitle ? 510 : 462, sub, 1.8f, white);
         }
-        if (g.boost)
-            text(1130, 751, "POWERED SHOTS", 1.5f, lime);
-        if (!g.jumpEnabled)
-            text(48, 751, "COLLECT POWERUPS TO UNLOCK JUMP", 1.25f, amber);
-        else if (g.jumpCooldown > 0)
-            text(48, 751, "JUMP RECHARGING", 1.5f, {.4f, .5f, .65f});
-        else
-            text(48, 751, "JUMP READY", 1.5f, lime);
-        text(500, 751,
-             "TOKENS " + number(g.bonusTokens) + "/3  POWERUP " +
-                 number(std::min(6, g.powerupStage)) + "/6",
-             1.4f, cyan);
+        if (g.isBonus()) {
+            text(48, 751, "GATES " + number(g.bonusHits) + "/" + number(g.bonusGateCount()), 1.5f,
+                 cyan);
+            char bonusStatus[96];
+            std::snprintf(bonusStatus, sizeof(bonusStatus), "SPEED %.2fX / BOOSTS %d / LAST +%d",
+                          g.bonusSpeed / (g.bonusType == 2 ? 37.5f : 30.f), g.bonusBoosts,
+                          g.bonusLastScore);
+            text(500, 751, bonusStatus, 1.4f, lime);
+        } else {
+            if (g.boost)
+                text(1130, 751, "POWERED SHOTS", 1.5f, lime);
+            if (!g.jumpEnabled)
+                text(48, 751, "COLLECT POWERUPS TO UNLOCK JUMP", 1.25f, amber);
+            else if (g.jumpCooldown > 0)
+                text(48, 751, "JUMP RECHARGING", 1.5f, {.4f, .5f, .65f});
+            else
+                text(48, 751, "JUMP READY", 1.5f, lime);
+            text(500, 751,
+                 "TOKENS " + number(g.bonusTokens) + "/3  POWERUP " +
+                     number(std::min(6, g.powerupStage)) + "/6",
+                 1.4f, cyan);
+        }
     }
 }
 } // namespace tempest

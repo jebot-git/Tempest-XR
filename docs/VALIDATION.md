@@ -10,8 +10,9 @@ with `TEMPEST_OPENXR=OFF` passes its six applicable suites:
 - Audit regressions, all enemy families and 100 wave generation budgets,
   powerups, both zaps, bonus courses, death/respawn and campaign victory.
 - Original tracker decoding, module selection and pause behavior.
-- Sample decoding, period-based pitch, detuned stereo pairs, delayed echo,
-  priority stealing under saturation, and frozen playback while paused.
+- Sample decoding, verified Imagitec positive pitch, original loop regions,
+  two/six channel limits, sample-only voices with SFX muted, detuned pairs,
+  priority stealing, music context changes/retry, and frozen playback while paused.
 - OpenGL sky coverage, original raster/font assets, mesh animation, HUD states,
   bonus scenes, death effects and frame feedback.
 - Original module/sample/art hashes and alpha-masked CRY conversion.
@@ -24,7 +25,9 @@ finish gates. It no longer assigns cursor coordinates to pass gates. Generation
 budget tests clear spawned enemies to check the 100 schedules; they do not claim
 a complete human campaign playthrough.
 
-The former bonus-exit camera jump is covered at entry, exit and next-web reset
+Bonus clearance ordering, droid expiry/deferred grants, first-ring approach,
+family boundaries and ring/psycho completion awards have dedicated regressions.
+The bonus camera is covered at entry, exit and return to the destination web
 for all three families. Boundary deltas must stay below 0.03 meters per 120 Hz
 tick. Explosion/capture paths also test pause, frozen combat, same-wave respawn,
 final-life behavior and camera continuity, with a 0.06-meter tick limit.
@@ -52,10 +55,13 @@ the web reset. Both death scenes rendered 88 death-animation frames. The first
 frame in each session precedes stereo submission. All seven sessions finished
 without GL errors or unexpected runtime loss.
 
-Source-art title, bonus and capture screenshots were visually inspected.
+Source-art title, bonus and capture screenshots were visually inspected. The
+new desktop bonus briefing and stereo headset briefing were also inspected.
 An isolated Xvfb progress check also verified the older five-field and current
-six-field settings formats, restoring wave 1 / `rave4.mod` and wave 17 /
-`tune7.mod` respectively, retaining best score and atomically saving preferences.
+six-field settings formats and the new nine-field volume format. It restored
+wave 1 / `rave4.mod` and wave 17 / `tune7.mod`, retained best score and unlocked
+progress, adjusted all three buses with F3/F5/F7, and atomically saved the
+expected values. Tests used a private Xvfb display and preferences directory.
 
 These checks establish simulated runtime integration and rendering, rather
 than physical tracking, headset comfort or wireless streaming performance.
@@ -68,3 +74,9 @@ recovery, heartbeat expiry, and rejection by an older compositor. The new
 runtime-exception case confirms restoration of desktop/bar presentation and
 release of both the native lease and SDL capture before normal game exit.
 The running user compositor and system OpenXR runtime were not changed.
+
+These are regression/integration checks, not proof of Jaguar behavioral
+equivalence. The [behavior audit](BEHAVIOR_AUDIT.md) catalogs all 41 update
+dispatch slots and the remaining AI, collision, tunnel, scoring, frontend and
+effect differences. In particular, the 24-course completion test exercises the
+prototype tunnel rules, which differ from the original green-track/trail game.

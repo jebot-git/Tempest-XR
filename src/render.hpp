@@ -40,6 +40,7 @@ class Renderer {
   public:
     void world(const Game &g, bool headset = false);
     void desktop(const Game &g, int width, int height);
+    static std::vector<std::string> bonusInstructions(const Game &g);
     void hud(const Game &g, int width, int height, const std::string &status, float sensitivity,
              bool inverted, bool muted);
     void finishFrame(const Game &g, int view, int x, int y, int width, int height);

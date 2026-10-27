@@ -18,6 +18,7 @@ struct Settings {
     float sensitivity = 1;
     bool inverted = false, muted = false, autoFire = true;
     int best = 0, unlockedLevel = 1;
+    float musicVolume = .9f, sfxVolume = .32f, voiceVolume = .9f;
 };
 static std::string configPath() {
     char *path = SDL_GetPrefPath("de-xr", "tempest-xr");
@@ -72,6 +73,7 @@ int main(int argc, char **argv) {
          warpDemo = false, effectsDemo = false, enemyDemo = false, explicitLevel = false;
     int bonusDemo = -1, deathDemo = -1;
     int frameLimit = 0, startingLevel = 1;
+    float musicVolume = -1, sfxVolume = -1, voiceVolume = -1;
     std::string capture, musicDirectory, launchMode = "auto", reportPath;
     try {
         for (int i = 1; i < argc; i++) {
@@ -107,6 +109,12 @@ int main(int argc, char **argv) {
                 noMusic = true;
             else if (arg == "--music-dir")
                 musicDirectory = value();
+            else if (arg == "--music-volume")
+                musicVolume = std::clamp(std::stof(value()) / 100, 0.f, 1.f);
+            else if (arg == "--sfx-volume")
+                sfxVolume = std::clamp(std::stof(value()) / 100, 0.f, 1.f);
+            else if (arg == "--voice-volume")
+                voiceVolume = std::clamp(std::stof(value()) / 100, 0.f, 1.f);
             else if (arg == "--no-audio")
                 noAudio = true;
             else if (arg == "--frames")
@@ -131,7 +139,10 @@ int main(int argc, char **argv) {
                        "MMB/Space: jump\nEnter: start/retry | P/Esc: pause | F: automatic fire | "
                        "V: toggle OpenXR\nB: half-SBS preview | R: recenter XR | F11: "
                        "fullscreen\n[/]: sensitivity | I: invert wheel | M: mute | N: next music "
-                       "track | Ctrl+Q: quit\n";
+                       "track preview | Ctrl+Q: quit\n"
+                       "Bonus: wheel/Left/Right steer, hold LMB/Up/W up, RMB/Down/S down\n"
+                       "F2/F3: music volume | F4/F5: effects | F6/F7: recorded voices\n"
+                       "--music-volume, --sfx-volume, --voice-volume: 0..100\n";
                 return 0;
             } else
                 throw std::runtime_error("Unknown argument: " + arg);
@@ -178,7 +189,20 @@ int main(int argc, char **argv) {
             settings.unlockedLevel = std::clamp(settings.unlockedLevel, 1, 100);
             settings.sensitivity = std::clamp(settings.sensitivity, .25f, 4.f);
             settings.best = std::max(0, settings.best);
+            // Extra fields are optional so older preference files retain the new defaults.
+            float m, s, v;
+            if (file >> m >> s >> v) {
+                settings.musicVolume = std::clamp(m, 0.f, 1.f);
+                settings.sfxVolume = std::clamp(s, 0.f, 1.f);
+                settings.voiceVolume = std::clamp(v, 0.f, 1.f);
+            }
         }
+        if (musicVolume >= 0)
+            settings.musicVolume = musicVolume;
+        if (sfxVolume >= 0)
+            settings.sfxVolume = sfxVolume;
+        if (voiceVolume >= 0)
+            settings.voiceVolume = voiceVolume;
         Game game;
         game.best = settings.best;
         game.autoFire = settings.autoFire;
@@ -189,6 +213,7 @@ int main(int argc, char **argv) {
         if (!noAudio) {
             audio = std::make_unique<Audio>();
             audio->mute(settings.muted);
+            audio->setVolumes(settings.musicVolume, settings.sfxVolume, settings.voiceVolume);
             const char *effectsOverride = std::getenv("TEMPEST_EFFECTS_DIR");
             audio->setSampleDirectory(
                 effectsOverride
@@ -208,8 +233,7 @@ int main(int argc, char **argv) {
             captured = enabled;
         };
         auto suspendXR = [&]() {
-            if (game.mode == Mode::Playing || game.mode == Mode::Transition ||
-                game.mode == Mode::Bonus)
+            if (game.active())
                 game.pause();
             ++xrSuspends;
             if (game.mode == Mode::Paused)
@@ -230,8 +254,7 @@ int main(int argc, char **argv) {
             everFocused = false;
             game.fireHeld = false;
             game.bonusUp = game.bonusDown = false;
-            if (pause && (game.mode == Mode::Playing || game.mode == Mode::Transition ||
-                          game.mode == Mode::Bonus))
+            if (pause && game.active())
                 game.pause();
             captureInput(false);
             dome.end(true);
@@ -310,7 +333,9 @@ int main(int argc, char **argv) {
                 return;
             }
             file << settings.sensitivity << ' ' << settings.inverted << ' ' << settings.muted << ' '
-                 << game.autoFire << ' ' << game.best << ' ' << game.unlockedLevel << '\n';
+                 << game.autoFire << ' ' << game.best << ' ' << game.unlockedLevel << ' '
+                 << settings.musicVolume << ' ' << settings.sfxVolume << ' ' << settings.voiceVolume
+                 << '\n';
             file.close();
             std::error_code error;
             std::filesystem::rename(temporary, path, error);
@@ -346,10 +371,7 @@ int main(int argc, char **argv) {
                     // changes during capture must not start a suspend/resume loop.
                     if (xr && captured && !dome.managed())
                         suspendXR();
-                    else if (!xr &&
-                             (game.mode == Mode::Playing || game.mode == Mode::Transition ||
-                              game.mode == Mode::Bonus) &&
-                             !frameLimit)
+                    else if (!xr && game.active() && !frameLimit)
                         game.pause();
                 }
                 if (event.type == SDL_WINDOWEVENT &&
@@ -450,6 +472,16 @@ int main(int argc, char **argv) {
                     }
                     if (key == SDLK_n && audio)
                         audio->nextTrack();
+                    if (key >= SDLK_F2 && key <= SDLK_F7) {
+                        float &volume = key <= SDLK_F3   ? settings.musicVolume
+                                        : key <= SDLK_F5 ? settings.sfxVolume
+                                                         : settings.voiceVolume;
+                        bool up = key == SDLK_F3 || key == SDLK_F5 || key == SDLK_F7;
+                        volume = std::clamp(volume + (up ? .05f : -.05f), 0.f, 1.f);
+                        if (audio)
+                            audio->setVolumes(settings.musicVolume, settings.sfxVolume,
+                                              settings.voiceVolume);
+                    }
                     if (key == SDLK_v)
                         toggleXR();
                     if (key == SDLK_r && xr)
@@ -466,6 +498,13 @@ int main(int argc, char **argv) {
             if (smoke && frame == 20)
                 smokeAfter = game.lane;
             auto keys = SDL_GetKeyboardState(nullptr);
+            if (game.isBonus() && game.mode != Mode::Paused) {
+                auto buttons = SDL_GetMouseState(nullptr, nullptr);
+                game.bonusUp =
+                    (buttons & SDL_BUTTON_LMASK) || keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
+                game.bonusDown =
+                    (buttons & SDL_BUTTON_RMASK) || keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
+            }
             keyboardTimer -= float(elapsed);
             if (keyboardTimer <= 0) {
                 if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A]) {
@@ -558,7 +597,15 @@ int main(int argc, char **argv) {
                     stereo(renderer, game, width, height);
                 else {
                     renderer.desktop(game, width, height);
-                    renderer.hud(game, width, height, status, settings.sensitivity,
+                    std::string audioStatus = status;
+                    if (audio && (game.mode == Mode::Paused || game.mode == Mode::Menu)) {
+                        audioStatus =
+                            audio->musicStatus() + " / F2-3 MUSIC " +
+                            std::to_string(int(settings.musicVolume * 100 + .5f)) + " / F4-5 SFX " +
+                            std::to_string(int(settings.sfxVolume * 100 + .5f)) + " / F6-7 VOICE " +
+                            std::to_string(int(settings.voiceVolume * 100 + .5f));
+                    }
+                    renderer.hud(game, width, height, audioStatus, settings.sensitivity,
                                  settings.inverted, settings.muted);
                     renderer.finishFrame(game, 4, 0, 0, width, height);
                 }

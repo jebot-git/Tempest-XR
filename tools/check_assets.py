@@ -11,6 +11,9 @@ for track in music['tracks']:
 effects=json.loads((root/'sfx/manifest.json').read_text())
 assert len(effects['samples'])==30
 for sample in effects['samples']:
+    expected_rate=round((26590000/(64*28))*((sample['pitch_word']*28)//43)/256)
+    assert sample['sample_rate']==expected_rate
+    assert 0<=sample['loop_start']<=sample['loop_end']<=sample['bytes']
     with wave.open(str(root/'sfx'/sample['file'])) as w:
         assert w.getnchannels()==1 and w.getsampwidth()==2 and w.getframerate()==sample['sample_rate']
         assert w.getnframes()==sample['bytes']

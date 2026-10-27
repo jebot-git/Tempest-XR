@@ -20,7 +20,7 @@ struct Vec3 {
         return {x * s, y * s, z * s};
     }
 };
-enum class Mode { Menu, Playing, Paused, Transition, GameOver, Bonus, Victory };
+enum class Mode { Menu, Playing, Paused, Transition, GameOver, Bonus, Victory, BonusReturn };
 enum class Kind {
     Flipper,
     Tanker,
@@ -54,7 +54,10 @@ enum class Sound {
     Ricochet,
     GateYes,
     GateYesAlt,
-    Snatch
+    Snatch,
+    Yes,
+    ClearanceEngine,
+    BonusToken
 };
 struct Enemy {
     Kind kind;
@@ -95,6 +98,9 @@ class Game {
     Vec3 deathShip;
     Vec3 respawnShip;
     Vec3 transitionOffset, bonusEntryOffset;
+    Vec3 returnOffset;
+    float returnTime = 0, rechargeDelay = 0;
+    int pendingBonus = -1, bonusBaseLevel = 1;
     std::vector<float> spawnTimers;
     std::vector<Enemy> pending;
     int killsToPowerup = 1, bonusCourse = 0;
@@ -110,6 +116,8 @@ class Game {
     void beginTransition(int destination);
     void completeWave();
     void tickBonus(float dt);
+    void tickPickups(float dt);
+    void returnFromBonus();
     int directionTo(int from, int to) const;
 
   public:
@@ -124,6 +132,7 @@ class Game {
     bool autoFire = true, fireHeld = false, boost = false;
     bool jumpEnabled = false, droidActive = false, bonusUp = false, bonusDown = false,
          bonusWon = false, bonusFinished = false;
+    bool droidPending = false, earlyDroid = false;
     float droidLane = 0, bonusTime = 0, bonusX = 0, bonusY = 0, bonusAngle = 0;
     float bonusDistance = 0, bonusSpeed = 30, bonusImpulse = 0, bonusEffectTime = 0;
     int bonusBoosts = 0, bonusLastScore = 0;
@@ -160,6 +169,14 @@ class Game {
     static bool hostile(Kind kind);
     bool isBonus() const {
         return mode == Mode::Bonus || (mode == Mode::Paused && pausedFrom == Mode::Bonus);
+    }
+    bool isBonusReturn() const {
+        return mode == Mode::BonusReturn ||
+               (mode == Mode::Paused && pausedFrom == Mode::BonusReturn);
+    }
+    bool active() const {
+        return mode == Mode::Playing || mode == Mode::Transition || mode == Mode::Bonus ||
+               mode == Mode::BonusReturn;
     }
     bool pulseActive() const;
     Vec3 enemyPosition(const Enemy &e) const;

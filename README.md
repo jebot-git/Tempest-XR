@@ -4,6 +4,8 @@ A source-informed **Tempest 2000** recreation for Linux desktop and native
 OpenXR, with mouse-wheel controls, a ship-following XR camera, the original
 Jaguar music and sound samples, original shaded meshes and raster artwork/fonts, and a 100-wave campaign.
 
+Detailed fidelity status and remaining work: [behavior audit](docs/BEHAVIOR_AUDIT.md).
+
 Reference: [Jeff Minter's Jaguar source, preserved by mwenge](https://github.com/mwenge/tempest2k),
 pinned to `8b50b467ce7dd7eee475aaf5ae86804d95401ae7`. This is a native C++17,
 SDL2 and OpenGL implementation; no ROM, emulator or Jaguar toolchain is needed.
@@ -50,13 +52,16 @@ wheel input accumulates; closed webs wrap, and open webs stop at their ends.
 | [ / ] | Wheel sensitivity, 0.25–4 lanes per detent |
 | I | Reverse wheel direction |
 | M | Mute music and effects |
-| N | Cycle original soundtrack modules |
+| N | Preview soundtrack modules until the next web/bonus/title |
+| F2/F3 | Music volume down/up |
+| F4/F5 | Sound effects volume down/up |
+| F6/F7 | Recorded voice volume down/up |
 | F11 | Fullscreen |
 | Ctrl+Q | Quit |
 
 In ring and psychedelic bonus stages, the **wheel controls X**, **holding left
-mouse moves up**, and **holding right mouse moves down**. In the tunnel bonus,
-rotate around the passage using the wheel. These adapt the original rotary
+mouse or Up/W moves up**, and **holding right mouse or Down/S moves down**. In the tunnel bonus,
+rotate around the passage using the wheel or Left/Right/A/D. Aim the crosshair through each opening; a miss ends the prototype bonus. Instructions appear in both desktop and XR views. These adapt the original rotary
 controller plus vertical-button controls to a mouse.
 
 ## Campaign
@@ -78,12 +83,12 @@ separately acquired friendly firing droid are implemented.
 Powerups progress through **particle laser → points → jump → points → friendly
 droid → bonus token**, followed by additional point awards. The first killed
 enemy offers a pickup; subsequent drops use the imported per-wave kill delay.
-Three tokens earn a bonus at wave clearance. Ring, tunnel and psychedelic
+Collected droids expire at web clearance. Catching a pickup during clearance schedules an early droid on the first pickup of the next web. Three tokens earn a bonus after the clearance flight. Ring, tunnel and psychedelic
 families use the original course layouts/order. Packed gate delays control spacing;
 up/down gates impart a vertical impulse, lightning gates increase speed by one
 eighth, and pyramid gates finish the course. Ring accuracy awards 250/500/750
 points using the source scoring rule. Psycho mode keeps its source delay override
-and scoring rule. Successful bonuses warp five levels, with the source's
+and scoring rule. Ring/psycho completion awards 20,000 points. Successful bonuses warp five levels, with the source's
 late-campaign limit on skipping. Failing a bonus costs no life.
 
 Jump lasts 0.85 seconds with a three-second recharge. Enemy bullets can be
@@ -151,11 +156,18 @@ The seven original Jaguar `.mod` files are in `assets/music/`. Title, gameplay
 16-wave blocks and bonus music use the original selection. Thirty original
 sample payloads are converted losslessly to WAV for shots, explosions, jumps,
 zaps, powered fire, ricochets and voice announcements. Sample playback uses
-period-derived nominal rates. Metadata-derived periods and priorities feed a voice-stealing mixer.
-Explosion pitch varies over the source range; the original dual-voice periods
-are used for death and Excellent, with paired recharge, warp and gate cues.
-Gate boosts change voice pitch and warp flight ramps its sound. A short stereo
-one-up echo is added by the modern mixer. Missing files use synthesized fallback.
+the included Imagitec driver's positive pitch conversion and loop metadata. The mixer
+allows two effects alongside music, or six without it. Death and Excellent use
+source detuned pairs; Recharge, gate, token and capture cues use paired samples.
+Engine loops accompany clearance; a clearance pickup triggers the original Yes
+loop. Ordinary arrival plays Warp, followed by Recharge after 80 source frames.
+**No synthetic speech or synthesized effect fallback is used.** Missing samples
+are silent; gameplay upgrade labels stay visual. Music, effects and recorded
+voices have independent volumes (defaults 90%, 32%, 90%), persisted with settings.
+F2/F3, F4/F5 and F6/F7 adjust them; paused desktop displays the levels and current
+music. CLI equivalents are `--music-volume`, `--sfx-volume` and `--voice-volume`
+with values 0–100. N previews a track until the next web or bonus/title context;
+automatic gameplay music changes in 16-web blocks, matching the source.
 
 Original `obj2d.s` face lists and vertex intensities supply 37 shaded/animated
 meshes, including animated beast, tanker and jump frames. Five original CRY
@@ -197,7 +209,7 @@ budgets, powerup/droid progression, both zaps, bonus success/failure and victory
 Tests complete all 24 bonus courses using public wheel/button controls, and
 verify projectile interception, continuous bonus boundaries and death/respawn.
 Render checks cover sky directions, source art/fonts, mesh animation, XR HUD
-states, bonus modes and effects. Mixer tests cover pitch, stereo pairs, echo,
+states, bonus modes and effects. Mixer tests cover pitch, sample-only voices, loop regions, two/six channels, music contexts, stereo pairs,
 priority stealing and pause. Asset checks verify module/sample/art hashes.
 Recorded results are in [validation](docs/VALIDATION.md).
 The native XR fixture uses a private runtime directory and leaves the system
@@ -225,6 +237,6 @@ streaming performance and comfort still require target-device validation.
 This remains a source-informed recreation: enemy AI, projectile limits, bonus
 inertia, camera motion, modern RGB polygon shading and mixing are adapted rather
 than cycle/pixel-identical Jaguar emulation. The original gate layout, delay and
-modifier data drive the bonus implementation, with a short initial XR approach.
+modifier data drive the bonus implementation, with source-based first-ring approach timing. The tunnel remains a radial-opening adaptation of the original track/trail bonus; see the behavior audit.
 Original Classic/Plus/two-player and Beastly modes, the full high-score table and
 EEPROM key algorithms remain outside this implementation.

@@ -58,6 +58,8 @@ int main() {
         status.startBonus(2);
         status.pause();
         expectHud("PSYCHEDELIC BONUS");
+        expectHud("HOLD LMB / UP / W: UP");
+        expectHud("MISSING ENDS BONUS");
         expectHud("PAUSED / CLICK OR ENTER TO RESUME");
         status.mode = Mode::Victory;
         expectHud("CAMPAIGN COMPLETE");

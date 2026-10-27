@@ -27,6 +27,10 @@ Jeff Minter / Atari. Source preservation/annotations: upstream contributors.
 | `fade`, `ffade` | Per-view scale/rotate/intensity framebuffer feedback (source scale 500/512). |
 | `czoom1/2`, `zoomup/down` | Wheel-following XR chase rig, jump recoil and continuous tunnel flight. |
 
+For specific state-machine gaps and corrected behaviors, see the
+[behavior audit](BEHAVIOR_AUDIT.md). The table above identifies source inspiration,
+not complete behavioral equivalence.
+
 ## Import tools
 
 ```sh
@@ -58,8 +62,8 @@ out and aliases the following `_nw100` data; the importer preserves that behavio
 Spawn ticks use a 60 Hz reference, with a fixed 120 Hz simulation step.
 
 Ring-course words pack delay, signed X, signed Y and gate effect. Their XY
-layouts, delays, effect types and eight-course order are imported. After a short
-initial XR approach, emission gaps use the source countdown and ground speed;
+layouts, delays, effect types and eight-course order are imported. After the source-based first-run
+approach (about nine seconds for rings), emission gaps use the source countdown and ground speed;
 boosts accelerate all approaching gates by one eighth. Up/down gates apply a
 short vertical impulse. Psycho mode overrides delay to eight as in `cg`.
 `run_gate`/`xbon` accuracy rewards replace flat awards. Tunnel courses preserve
@@ -72,15 +76,23 @@ nearby annotation saying 32). libopenmpt is an optional system dependency.
 
 Effects come from the signed 8-bit payloads in `sounds/samples`. The binary
 metadata stores lengths as 24:8 fixed point. The fetcher produces lossless
-16-bit PCM WAV and preserves each raw payload hash. Sample rates are nominal
-period-derived values. Some preserved payload lengths differ from the old
-metadata (for example sample 02); the manifest records both sizes. Playback
-uses the available payload, never reads beyond it, and falls back to synthesis
-if files are missing. Source periods/priorities are generated into
-`sample_data.hpp`. `sayex` uses periods 352/354; `zapson` uses 200/196;
-normal explosions vary over 128..383. The modern stereo mixer interpolates
-pitch, preserves announcement priorities under saturation, and adds a delayed
-one-up echo. This is not a cycle-accurate Jaguar DSP implementation.
+16-bit PCM WAV and preserves each raw payload hash. The converter verifies executable instructions in the included
+`dat/moomoo.dat` Imagitec driver. SCLK=27, PLAYFX2 converts pitch via
+`floor(pitch*28/43)`, and the DSP adds this as an 8.8 phase increment. At nominal
+26.59 MHz, rate is `clock/(64*28)*floor(pitch*28/43)/256`. The old Amiga-period
+interpretation was incorrect. Pitch 512 is approximately 19,301 Hz, making the
+Recharge sample about 2.25 seconds. Increasing the pitch word increases pitch.
+
+Some preserved payload lengths differ from metadata; the manifest records both
+sizes. Playback uses the available payload and bounded source loop regions.
+Missing files are silent. There is no synthesized speech or effects fallback.
+Source pitch/priority/loop data is generated into `sample_data.hpp`; `sayex` uses
+352/354 and `zapson` 200/196, while explosion pitch varies over 128..383.
+The actual PLAYFX2 slot loops allow two effects with music, six without music.
+Modern stereo interpolation, limiting, separate voice volume and ducking are
+adaptations. Exact DSP modulation and the original 50-frame music fade remain
+unported. Detailed disassembly addresses and remaining cue differences are in
+the behavior audit.
 
 Original polygon vertices, faces and intensities are imported; modern RGB tints,
 blending, motion and glow replace the exact Jaguar CRY/polygon/GPU pipeline.

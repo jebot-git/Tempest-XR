@@ -79,13 +79,13 @@ int main() {
             same = g.xrCameraPosition();
             CHECK(std::hypot(same.x - last.x, same.y - last.y) < .03f);
             CHECK(std::abs(same.z - last.z) < .03f);
-            while (g.mode == Mode::Transition) {
+            while (g.mode == Mode::BonusReturn) {
                 last = g.xrCameraPosition();
                 g.tick(1.f / 120);
             }
             same = g.xrCameraPosition();
             CHECK(std::hypot(same.x - last.x, same.y - last.y) < .03f);
-            CHECK(std::abs(last.z + Game::warpTravel - same.z) < .03f);
+            CHECK(std::abs(last.z - same.z) < .03f);
         }
         // Enemy bullets are shootable, including crossing between two ticks.
         for (int weapon = 0; weapon < 3; ++weapon) {
@@ -238,6 +238,36 @@ int main() {
         g.spawn(Kind::Flipper, 5, .5f);
         step(g, .2f);
         CHECK(std::any_of(g.shots.begin(), g.shots.end(), [](auto &s) { return s.ally; }));
+        // Collected droids expire at clearance; a clearance pickup schedules one early grant.
+        g.enemies.clear();
+        g.enemiesRemaining = 0;
+        g.tick(.01f);
+        CHECK(g.mode == Mode::Transition && !g.droidActive);
+        pickup(g);
+        CHECK(g.droidPending);
+        step(g, 2.41f);
+        CHECK(g.mode == Mode::Playing && !g.droidActive && g.droidPending);
+        CHECK(std::find(g.sounds.begin(), g.sounds.end(), Sound::Warp) != g.sounds.end());
+        g.sounds.clear();
+        step(g, 1.34f);
+        CHECK(std::find(g.sounds.begin(), g.sounds.end(), Sound::Wave) != g.sounds.end());
+        pickup(g);
+        CHECK(g.droidActive && !g.droidPending && g.earlyDroid && g.powerupStage == 0);
+        g.enemies.clear();
+        g.enemiesRemaining = 0;
+        g.tick(.01f);
+        CHECK(!g.droidActive && !g.earlyDroid);
+        pickup(g);
+        CHECK(g.droidPending);
+        for (int cleared : {15, 16, 31, 32, 47, 48, 63, 64}) {
+            g.start(cleared);
+            g.bonusTokens = 3;
+            g.enemiesRemaining = 0;
+            g.tick(.01f);
+            step(g, 2.41f);
+            constexpr int types[] = {0, 1, 2, 1};
+            CHECK(g.mode == Mode::Bonus && g.bonusType == types[cleared / 16 % 4]);
+        }
         // Play every course with public wheel/button controls, including impulses.
         std::set<int> gateEffects;
         for (int type = 0; type < 3; type++) {
@@ -268,7 +298,8 @@ int main() {
                     g.tick(1.f / 120);
                     if (g.bonusGate != gate) {
                         gateEffects.insert(effect);
-                        CHECK(g.score - score == g.bonusLastScore);
+                        CHECK(g.score - score ==
+                              g.bonusLastScore + (g.bonusWon && type != 1 ? 20000 : 0));
                         if (effect == 1)
                             CHECK(g.bonusImpulse > 2.3f);
                         if (effect == 2)
@@ -284,9 +315,15 @@ int main() {
                 CHECK(g.bonusWon);
                 CHECK(g.bonusHits == g.bonusGateCount());
                 step(g, 2.1f);
-                CHECK(g.mode == Mode::Transition);
-                CHECK(g.targetLevel == startingLevel + 5);
-                step(g, 2.5f);
+                CHECK(g.mode == Mode::BonusReturn);
+                CHECK(g.level == startingLevel + 5);
+                g.pause();
+                auto pausedCamera = g.xrCameraPosition();
+                step(g, .4f);
+                CHECK(g.xrCameraPosition().z == pausedCamera.z);
+                g.pause();
+                step(g, 1.5f);
+                CHECK(g.mode == Mode::Playing);
                 CHECK(g.level == startingLevel + 5);
             }
         }
@@ -296,14 +333,19 @@ int main() {
         g.bonusTokens = 3;
         g.enemiesRemaining = 0;
         g.tick(.01f);
-        CHECK(g.mode == Mode::Bonus);
+        CHECK(g.mode == Mode::Transition);
+        CHECK(std::find(g.sounds.begin(), g.sounds.end(), Sound::ClearanceEngine) !=
+              g.sounds.end());
+        step(g, 2.41f);
+        CHECK(g.mode == Mode::Bonus && g.bonusTokens == 0 && g.level == 2);
+        CHECK(g.bonusGateDistance(0) == 269.5f);
         g.bonusX = -3;
         g.bonusY = -3;
-        step(g, 2.1f);
+        step(g, 9.1f);
         CHECK(g.bonusFinished && !g.bonusWon);
         CHECK(g.lives == 3);
         step(g, 1.7f);
-        CHECK(g.targetLevel == 2);
+        CHECK(g.level == 2 && g.mode == Mode::BonusReturn);
         CHECK(campaignWaves.size() == 100);
         CHECK(campaignWaves[0].count == 25);
         CHECK(campaignWaves[2].spawns[1].periodTicks == 444);

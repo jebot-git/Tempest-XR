@@ -39,7 +39,7 @@ void Game::loadWeb() {
     visualLane = float(lane);
     wheelRemainder = 0;
     transitionOffset = {};
-    waveTime = 0;
+    waveTime = rechargeDelay = 0;
     fireTimer = 0;
     const auto &wave = campaignWaves[size_t(level - 1)];
     waveSize = wave.count;
@@ -53,6 +53,9 @@ void Game::loadWeb() {
     shots.clear();
     spikes.assign(size_t(web.lanes()), 1.f);
     zaps = 2;
+    droidActive = earlyDroid = false;
+    droidTimer = 0;
+    pendingBonus = -1;
     boost = false;
     jumpEnabled = false;
     powerupStage = 0;
@@ -77,6 +80,9 @@ void Game::start(int startingLevel) {
     bonusTokens = 0;
     bonusesPlayed = 0;
     bonusRuns.fill(0);
+    droidPending = earlyDroid = false;
+    pendingBonus = -1;
+    returnTime = rechargeDelay = 0;
     droidActive = false;
     boost = false;
     jumpEnabled = false;
@@ -140,7 +146,7 @@ void Game::jump() {
     }
 }
 void Game::pause() {
-    if (mode == Mode::Playing || mode == Mode::Transition || mode == Mode::Bonus) {
+    if (active()) {
         pausedFrom = mode;
         mode = Mode::Paused;
     } else if (mode == Mode::Paused)
@@ -172,6 +178,10 @@ Vec3 Game::shipPosition() const {
     }
     if (mode == Mode::GameOver)
         return deathShip;
+    if (isBonusReturn()) {
+        float t = std::clamp(1 - returnTime / 1.5f, 0.f, 1.f);
+        return position(visualLane, 0) + returnOffset * (1 - t * t * (3 - 2 * t));
+    }
     if (isBonus()) {
         float t = std::clamp(bonusTime / 1.5f, 0.f, 1.f);
         float blend = t * t * (3 - 2 * t);
@@ -336,6 +346,30 @@ void Game::zap() {
     }
 }
 void Game::collectPowerup() {
+    // run_pup: a pickup caught while zooming schedules an early droid on
+    // the next wave; it does not turn the ordinary droid into a persistent upgrade.
+    if (mode == Mode::Transition) {
+        if (!droidPending && !earlyDroid) {
+            droidPending = true;
+            announce("DROID NEXT WEB");
+            sounds.push_back(Sound::Yes);
+        } else {
+            powerupStage = 2;
+            addScore(2000);
+            announce("EXCELLENT");
+            sounds.push_back(Sound::Excellent);
+        }
+        return;
+    }
+    if (droidPending) {
+        droidPending = false;
+        earlyDroid = true;
+        droidActive = true;
+        droidLane = visualLane;
+        announce("A.I. DROID");
+        sounds.push_back(Sound::Pickup);
+        return;
+    }
     if (powerupStage == 4 && droidActive)
         powerupStage = 5;
     switch (powerupStage) {
@@ -354,6 +388,7 @@ void Game::collectPowerup() {
         break;
     case 5:
         bonusTokens++;
+        sounds.push_back(Sound::BonusToken);
         announce("BONUS TOKEN " + std::to_string(bonusTokens) + " / 3");
         zapTime = 1.1f;
         for (auto &e : enemies)
@@ -384,10 +419,11 @@ void Game::beginTransition(int destination) {
     int first = std::clamp(next.start, 0, next.lanes() - 1);
     nextSpawn =
         (next.points[size_t(first)] + next.points[size_t(first + 1) % next.points.size()]) * .5f;
+    droidActive = earlyDroid = false; // rundroid expires collected droids at wave_tim == -2.
     mode = Mode::Transition;
     transitionTimer = 2.4f;
-    sounds.push_back(Sound::Warp);
-    announce("YES YES YES", 2.4f);
+    sounds.push_back(Sound::ClearanceEngine);
+    announce("WEB CLEAR", 2.4f);
 }
 void Game::completeWave() {
     addScore(1000);
@@ -400,15 +436,14 @@ void Game::completeWave() {
         return;
     }
     if (bonusTokens >= 3) {
-        bonusTokens -= 3;
         constexpr int types[] = {0, 1, 2, 1};
-        startBonus(types[(level - 1) / 16 % 4]);
-        return;
+        pendingBonus = types[level / 16 % 4]; // cweb has advanced before sweb0.
     }
     beginTransition(level + 1);
 }
 void Game::startBonus(int type) {
     Vec3 entry = shipPosition();
+    bonusBaseLevel = level;
     mode = Mode::Bonus;
     bonusType = std::clamp(type, 0, 2);
     bonusCourse = bonusRuns[size_t(bonusType)]++ % 8;
@@ -420,7 +455,9 @@ void Game::startBonus(int type) {
         (bonusType == 2 ? 37.5f : 30.f) + float(bonusRuns[size_t(bonusType)] - 1) * .46875f;
     bonusGate = 0;
     bonusHits = 0;
-    bonusX = bonusY = bonusAngle = 0;
+    bonusX = bonusAngle = 0;
+    bonusY = bonusType == 1 ? 0.f : .25f / 32; // m7go initializes vp_y=$4000.
+    droidActive = false;
     bonusEntryOffset = entry - (bonusCursor() + Vec3{0, 0, -3.8f});
     bonusCheckTime = 0;
     bonusResultTime = 0;
@@ -430,7 +467,6 @@ void Game::startBonus(int type) {
     pending.clear();
     shots.clear();
     announce(bonusType == 1 ? "TUNNEL BONUS" : "FOLLOW THE RINGS", 2.5f);
-    sounds.push_back(Sound::Warp);
 }
 int Game::bonusGateCount() const {
     return bonusType == 1 ? 64 : int(ringCourses[size_t(bonusCourse)].size()) - 1;
@@ -453,10 +489,11 @@ int Game::bonusGateEffect(int gate) const {
     return int(course[size_t(std::clamp(gate, 0, int(course.size()) - 2))] & 255);
 }
 float Game::bonusGateDistance(int gate) const {
-    // Keep a short XR approach; subsequent emission gaps follow cg's source
-    // countdown: (packed delay + 1) * 12 source units. Boosts accelerate every
+    // cg starts at 16 units; the first gate travels from Z=255 to Z<=2.
+    // These first-run distances include 60 Hz countdown quantization. Later
+    // gaps use (packed delay + 1) * 12 units. Boosts accelerate every
     // approaching gate, rather than assigning each a fixed arrival timestamp.
-    float distance = 60;
+    float distance = bonusType == 1 ? 60.f : bonusType == 2 ? 269.375f : 269.5f;
     for (int i = 0; i < gate; ++i)
         distance += bonusType == 1 ? 13.5f : float(bonusGateDelay(i) + 1) * 12;
     return distance;
@@ -487,7 +524,7 @@ void Game::tickBonus(float dt) {
     if (bonusFinished) {
         bonusResultTime -= dt;
         if (bonusResultTime <= 0)
-            beginTransition(level + (bonusWon && level < 90 ? 5 : 1));
+            returnFromBonus();
         return;
     }
     bonusY = std::clamp(bonusY + (float(int(bonusUp) - int(bonusDown)) * 1.6f + bonusImpulse) * dt,
@@ -533,9 +570,39 @@ void Game::tickBonus(float dt) {
         if (effect == 4 || bonusGate >= bonusGateCount()) {
             bonusWon = bonusFinished = true;
             bonusResultTime = 2;
+            if (bonusType != 1)
+                addScore(20000); // m7scr success; tundraw has its own continuous scoring.
             announce(level < 90 ? "WARP 5 LEVELS" : "EXCELLENT", 2);
-            sounds.push_back(Sound::Wave);
+            sounds.push_back(Sound::Excellent);
         }
+    }
+}
+void Game::returnFromBonus() {
+    Vec3 origin = shipPosition();
+    level = std::clamp(bonusBaseLevel + (bonusWon && bonusBaseLevel < 90 ? 5 : 1), 1, 100);
+    loadWeb();
+    returnOffset = origin - position(visualLane, 0);
+    returnTime = 1.5f;
+    mode = Mode::BonusReturn;
+    announce("RETURNING TO WEB", 1.5f);
+}
+void Game::tickPickups(float dt) {
+    float shipDepth = mode == Mode::Transition ? warpDistance() / 9 : 0;
+    for (auto &e : enemies) {
+        if (e.dead || e.kind != Kind::Powerup)
+            continue;
+        float previous = e.depth;
+        e.depth = std::max(0.f, e.depth - dt * .28f);
+        if (e.lane == lane && (std::abs(e.depth - shipDepth) < .065f ||
+                               (mode == Mode::Transition && previous >= shipDepth - .1f &&
+                                e.depth <= shipDepth + .1f))) {
+            e.dead = true;
+            collectPowerup();
+        }
+        if (e.age > 12)
+            e.dead = true;
+        if (mode == Mode::Transition)
+            e.age += dt;
     }
 }
 void Game::tick(float dt) {
@@ -595,7 +662,18 @@ void Game::tick(float dt) {
         tickBonus(dt);
         return;
     }
+    if (mode == Mode::BonusReturn) {
+        returnTime = std::max(0.f, returnTime - dt);
+        if (returnTime == 0) {
+            mode = Mode::Playing;
+            invulnerable = 1;
+            sounds.push_back(Sound::Wave);
+            announce("SUPERZAPPER RECHARGE");
+        }
+        return;
+    }
     if (mode == Mode::Transition) {
+        tickPickups(dt);
         transitionTimer -= dt;
         float depth = warpDistance() / 9;
         if (depth >= spikes[size_t(lane)] && depth <= 1 && spikes[size_t(lane)] < .99f)
@@ -603,14 +681,28 @@ void Game::tick(float dt) {
         if (mode == Mode::GameOver || deathTime > 0)
             return;
         if (transitionTimer <= 0) {
+            int bonus = pendingBonus, clearedLevel = level;
             level = targetLevel;
             loadWeb();
             mode = Mode::Playing;
+            if (bonus >= 0) {
+                bonusTokens -= 3;
+                startBonus(bonus);
+                bonusBaseLevel = clearedLevel;
+                return;
+            }
             invulnerable = 1;
+            sounds.push_back(Sound::Warp);
+            rechargeDelay = 80.f / 60;
+        }
+        return;
+    }
+    if (rechargeDelay > 0) {
+        rechargeDelay = std::max(0.f, rechargeDelay - dt);
+        if (rechargeDelay == 0) {
             sounds.push_back(Sound::Wave);
             announce("SUPERZAPPER RECHARGE");
         }
-        return;
     }
     waveTime += dt;
     bool pulse = pulseActive();
@@ -662,6 +754,7 @@ void Game::tick(float dt) {
         s.previous = s.depth;
         s.depth += dt * (boost && !s.ally ? 3.3f : 2.1f);
     }
+    tickPickups(dt);
     std::vector<Enemy> children;
     for (auto &e : enemies) {
         if (e.dead)
@@ -669,19 +762,8 @@ void Game::tick(float dt) {
         e.age += dt;
         e.flip += dt;
         e.firing -= dt;
-        if (e.kind == Kind::Powerup) {
-            e.depth -= dt * .28f;
-            if (e.depth <= 0) {
-                e.depth = 0;
-                if (e.lane == lane) {
-                    e.dead = true;
-                    collectPowerup();
-                }
-                if (e.age > 12)
-                    e.dead = true;
-            }
+        if (e.kind == Kind::Powerup)
             continue;
-        }
         if (e.kind == Kind::EnemyShot) {
             float previous = e.depth;
             e.depth -= dt * .55f;

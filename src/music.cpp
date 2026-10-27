@@ -81,7 +81,7 @@ void Music::render(float *stereo, size_t frames) {
         return;
     size_t count = p->read(p->module, 48000, frames, stereo);
     for (size_t i = 0; i < count; i++) {
-        p->gain = std::min(.48f, p->gain + 1.f / (48000 * .18f));
+        p->gain = std::min(.85f, p->gain + .85f / (48000 * .18f));
         stereo[i * 2] *= p->gain;
         stereo[i * 2 + 1] *= p->gain;
     }

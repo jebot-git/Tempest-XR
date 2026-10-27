@@ -1,5 +1,6 @@
 #include "audio.hpp"
 #include "sample_data.hpp"
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
@@ -49,6 +50,9 @@ void Audio::setSampleDirectory(const std::string &directory) {
                 auto &samples = effectSamples[size_t(i)];
                 samples.resize(count);
                 std::memcpy(samples.data(), conversion.buf, count * sizeof(float));
+                loopStarts[size_t(i)] = sourceSamples[size_t(i)].loopStart * 48000.0 / spec.freq;
+                loopEnds[size_t(i)] = std::min(double(count / 2), sourceSamples[size_t(i)].loopEnd *
+                                                                      48000.0 / spec.freq);
                 loaded++;
             }
         }
@@ -56,6 +60,24 @@ void Audio::setSampleDirectory(const std::string &directory) {
     }
     SDL_UnlockAudioDevice(device);
     std::cerr << "Original effects: " << loaded << " samples\n";
+}
+void Audio::setVolumes(float music, float effects, float voice) {
+    if (!device)
+        return;
+    SDL_LockAudioDevice(device);
+    musicVolume = std::clamp(music, 0.f, 1.f);
+    effectsVolume = std::clamp(effects, 0.f, 1.f);
+    voiceVolume = std::clamp(voice, 0.f, 1.f);
+    SDL_UnlockAudioDevice(device);
+}
+std::string Audio::musicStatus() const {
+    std::string track = currentTrack;
+    if (track.size() > 4)
+        track.resize(track.size() - 4);
+    std::transform(track.begin(), track.end(), track.begin(),
+                   [](unsigned char ch) { return char(std::toupper(ch)); });
+    return "MUSIC " + (track.empty() ? "OFF" : track) +
+           (manuallySelected ? " / PREVIEW UNTIL NEXT WEB" : " / AUTO");
 }
 static int effectSample(Sound sound) {
     switch (sound) {
@@ -72,17 +94,18 @@ static int effectSample(Sound sound) {
     case Sound::Wave:
         return 22;
     case Sound::Pickup:
-        return 12;
+        return 9;
     case Sound::Warp:
         return 9;
     case Sound::PoweredShot:
         return 11;
     case Sound::Excellent:
+    case Sound::BonusToken:
         return 21;
     case Sound::OneUp:
         return 24;
     case Sound::Pulse:
-        return 19;
+        return 7;
     case Sound::Ricochet:
         return 20;
     case Sound::GateYes:
@@ -91,6 +114,10 @@ static int effectSample(Sound sound) {
         return 27;
     case Sound::Snatch:
         return 25;
+    case Sound::Yes:
+        return 23;
+    case Sound::ClearanceEngine:
+        return 0;
     }
     return -1;
 }
@@ -117,8 +144,10 @@ void Audio::play(Sound sound) {
         priority = 2;
         break;
     case Sound::Zap:
-    case Sound::Pulse:
         priority = 10;
+        break;
+    case Sound::Pulse:
+        priority = 51;
         break;
     case Sound::Pickup:
         priority = 3;
@@ -127,6 +156,7 @@ void Audio::play(Sound sound) {
         priority = 50;
         break;
     case Sound::Wave:
+    case Sound::Yes:
         priority = 101;
         break;
     case Sound::Warp:
@@ -134,10 +164,14 @@ void Audio::play(Sound sound) {
         break;
     case Sound::GateYes:
     case Sound::GateYesAlt:
+    case Sound::ClearanceEngine:
         priority = 100;
         break;
     case Sound::Excellent:
         priority = 101;
+        break;
+    case Sound::BonusToken:
+        priority = 90;
         break;
     case Sound::OneUp:
         priority = 3;
@@ -148,60 +182,72 @@ void Audio::play(Sound sound) {
     default:
         break;
     }
-    auto queue = [&](int which, float period, float pan, float gain, float delay = 0.f) {
-        auto *voice =
-            &*std::min_element(voices.begin(), voices.end(), [](const auto &a, const auto &b) {
+    auto queue = [&](int which, int pitch, float pan, float gain, bool loop = false) {
+        // Missing samples are silent: speech and effects both come from the source PCM.
+        if (which < 0 || effectSamples[size_t(which)].empty())
+            return;
+        auto *voice = &*std::min_element(
+            voices.begin(), voices.begin() + effectChannels, [](const auto &a, const auto &b) {
                 if ((a.remaining <= 0) != (b.remaining <= 0))
                     return a.remaining <= 0;
                 return a.priority == b.priority ? a.serial < b.serial : a.priority < b.priority;
             });
         if (voice->remaining > 0 && voice->priority > priority)
             return;
-        float length = sound == Sound::Shot   ? .045f
-                       : sound == Sound::Zap  ? .6f
-                       : sound == Sound::Wave ? .55f
-                       : sound == Sound::Warp ? 2.4f
-                                              : .18f;
         *voice = {};
         voice->sound = sound;
         voice->serial = ++voiceSerial;
         voice->priority = priority;
         voice->pan = pan;
         voice->gain = gain;
-        voice->delay = delay;
+        voice->loop = loop;
+        voice->loopStart = loopStarts[size_t(which)];
+        voice->loopEnd = loopEnds[size_t(which)];
+        if (voice->loopEnd <= voice->loopStart)
+            voice->loop = false;
+        float length = 0;
         if (which >= 0 && !effectSamples[size_t(which)].empty()) {
             voice->sample = which;
-            voice->step = period > 0 ? float(sourceSamples[size_t(which)].period) / period : 1;
+            voice->step = pitch > 0 ? float(effectStep(pitch)) /
+                                          effectStep(sourceSamples[size_t(which)].pitch)
+                                    : 1;
             length = float(effectSamples[size_t(which)].size()) / (48000 * 2 * voice->step);
         }
-        voice->duration = voice->remaining = length;
+        voice->remaining = length;
     };
     if (sound == Sound::Excellent) {
-        // sayex issues two PLAYFX2 calls with periods $160 and $162.
+        // sayex issues two PLAYFX2 calls with pitch words $160 and $162.
         queue(sample, 352, -.25f, .65f);
         queue(sample, 354, .25f, .65f);
     } else if (sound == Sound::Hit) {
         queue(sample, 200, -.25f, .65f);
         queue(sample, 196, .25f, .65f);
+    } else if (sound == Sound::Snatch || sound == Sound::BonusToken) {
+        queue(sample, 0, -.2f, .65f);
+        queue(sample, 0, .2f, .65f);
+    } else if (sound == Sound::Pulse) {
+        queue(sample, 500, 0, 1);
     } else if (sound == Sound::Wave) {
         queue(sample, 0, -.2f, .65f);
         queue(sample, 0, .2f, .65f);
     } else if (sound == Sound::Warp) {
-        queue(sample, 500, -.2f, .65f);
-        queue(sample, 500, .2f, .65f);
-        priority = 101;
-        queue(23, 512, -.2f, .65f);
-        queue(23, 512, .2f, .65f);
+        queue(sample, 0, -.2f, .65f);
+        queue(sample, 0, .2f, .65f);
+    } else if (sound == Sound::Yes) {
+        queue(23, 512, -.2f, .65f, true);
+        queue(23, 512, .2f, .65f, true);
+    } else if (sound == Sound::ClearanceEngine) {
+        queue(0, 10, -.2f, .65f, true);
+        queue(2, 20, .2f, .65f, true);
+    } else if (sound == Sound::Pickup) {
+        queue(sample, 428, 0, 1);
     } else if (sound == Sound::GateYes || sound == Sound::GateYesAlt) {
-        queue(sample, float(gatePeriod), -.2f, .65f);
-        queue(sample, float(gatePeriod), .2f, .65f);
+        queue(sample, gatePeriod, -.2f, .65f);
+        queue(sample, gatePeriod, .2f, .65f);
     } else if (sound == Sound::Kill) {
-        // killme randomizes sfx_pitch over the original 128..383 period range.
+        // killme randomizes sfx_pitch over the original 128..383 pitch range.
         random = random * 1664525u + 1013904223u;
-        queue(sample, float(128 + (random & 255)), 0, 1);
-    } else if (sound == Sound::OneUp) {
-        queue(sample, 512, -.25f, .8f);
-        queue(sample, 514, .25f, .5f, .08f);
+        queue(sample, int(128 + (random & 255)), 0, 1);
     } else
         queue(sample, 0, 0, 1);
     SDL_UnlockAudioDevice(device);
@@ -214,6 +260,13 @@ void Audio::setMusicDirectory(const std::string &directory) {
 void Audio::updateMusic(const Game &game, bool suspended) {
     if (!device)
         return;
+    bool title =
+        game.mode == Mode::Menu || game.mode == Mode::GameOver || game.mode == Mode::Victory;
+    int context = title ? -2 - int(game.mode) : game.isBonus() ? 1000 + game.bonusType : game.level;
+    if (context != musicContext) {
+        manuallySelected = false;
+        musicContext = context;
+    }
     static const char *allTracks[] = {"tune13.mod", "tune7.mod", "tune1.mod", "tune3.mod",
                                       "rave4.mod",  "tune5.mod", "tune12.mod"};
     std::string desired = manuallySelected ? allTracks[manualTrack % 7]
@@ -222,24 +275,45 @@ void Audio::updateMusic(const Game &game, bool suspended) {
                               : Music::trackForLevel(game.level, game.mode == Mode::Menu ||
                                                                      game.mode == Mode::GameOver ||
                                                                      game.mode == Mode::Victory);
-    if (!musicDirectory.empty() && desired != currentTrack) {
+    if (!musicDirectory.empty() && desired != currentTrack &&
+        (failedTrack != desired || SDL_GetTicks64() >= retryMusicAt)) {
         SDL_LockAudioDevice(device);
         bool loaded = music.load((std::filesystem::path(musicDirectory) / desired).string());
         SDL_UnlockAudioDevice(device);
-        currentTrack = desired;
+        if (loaded) {
+            currentTrack = desired;
+            failedTrack.clear();
+        } else {
+            failedTrack = desired;
+            retryMusicAt = SDL_GetTicks64() + 2000;
+        }
         std::cerr << (loaded ? "Soundtrack: " : "Soundtrack unavailable: ") << desired << '\n';
     }
     SDL_LockAudioDevice(device);
     if (game.mode != Mode::Paused && game.mode != audioMode) {
         for (auto &voice : voices)
-            if (voice.sound == Sound::Warp)
+            if (voice.sound == Sound::ClearanceEngine || voice.sound == Sound::Yes)
                 voice.remaining = 0;
         audioMode = game.mode;
     }
+    if (game.deathTime > 0)
+        for (auto &voice : voices)
+            if (voice.loop)
+                voice.remaining = 0;
+    size_t channels = currentTrack.empty() ? 6 : 2;
+    if (channels < effectChannels)
+        for (size_t i = channels; i < voices.size(); ++i)
+            voices[i].remaining = 0;
+    effectChannels = channels;
     gatePeriod = 512 + game.bonusBoosts * 5;
     for (auto &voice : voices)
-        if (voice.remaining > 0 && voice.sound == Sound::Warp && voice.sample == 9)
-            voice.step = float(sourceSamples[9].period) / (500 - 350 * game.transitionDepth());
+        if (voice.remaining > 0 && voice.sound == Sound::ClearanceEngine) {
+            int pitch = int(10 + game.transitionDepth() * 144);
+            if (voice.sample == 2)
+                pitch *= 2;
+            voice.step =
+                float(effectStep(pitch)) / effectStep(sourceSamples[size_t(voice.sample)].pitch);
+        }
     this->suspended = suspended || game.mode == Mode::Paused;
     music.pause(suspended || game.mode == Mode::Paused);
     SDL_UnlockAudioDevice(device);
@@ -258,14 +332,21 @@ void Audio::callback(void *self, Uint8 *stream, int size) {
     }
     audio.music.render(out, size_t(count));
     for (int i = 0; i < count; i++) {
-        float mixed = 0, left = 0, right = 0;
+        float left = 0, right = 0, voiceLeft = 0, voiceRight = 0;
+        bool originalBusy = false;
+        for (const auto &v : audio.voices)
+            if (v.remaining > 0 && (v.sound == Sound::Wave || v.sound == Sound::Excellent ||
+                                    v.sound == Sound::Yes || v.sound == Sound::Snatch))
+                originalBusy = true;
+        bool narration = originalBusy;
+        float targetDuck = narration ? 1.f : 0.f;
+        audio.duck += (targetDuck - audio.duck) / (48000 * (narration ? .02f : .25f));
         for (auto &v : audio.voices)
             if (v.remaining > 0) {
-                if (v.delay > 0) {
-                    v.delay -= 1.f / 48000;
-                    continue;
-                }
                 if (v.sample >= 0) {
+                    if (v.loop && v.position >= v.loopEnd)
+                        v.position = v.loopStart +
+                                     std::fmod(v.position - v.loopStart, v.loopEnd - v.loopStart);
                     const auto &pcm = audio.effectSamples[size_t(v.sample)];
                     size_t frame = size_t(v.position), next = frame + 1;
                     float blend = float(v.position - double(frame));
@@ -273,72 +354,31 @@ void Audio::callback(void *self, Uint8 *stream, int size) {
                         next = std::min(next, pcm.size() / 2 - 1);
                         float l = pcm[frame * 2] * (1 - blend) + pcm[next * 2] * blend;
                         float r = pcm[frame * 2 + 1] * (1 - blend) + pcm[next * 2 + 1] * blend;
-                        left += l * .3f * v.gain * (v.pan > 0 ? 1 - v.pan : 1);
-                        right += r * .3f * v.gain * (v.pan < 0 ? 1 + v.pan : 1);
+                        float pl = l * .3f * v.gain * (v.pan > 0 ? 1 - v.pan : 1),
+                              pr = r * .3f * v.gain * (v.pan < 0 ? 1 + v.pan : 1);
+                        if (v.sample >= 21 && v.sample <= 27) {
+                            voiceLeft += pl;
+                            voiceRight += pr;
+                        } else {
+                            left += pl;
+                            right += pr;
+                        }
                         v.position += v.step;
                     } else
                         v.remaining = 0;
-                    v.remaining -= 1.f / 48000;
+                    if (!v.loop)
+                        v.remaining -= 1.f / 48000;
                     continue;
                 }
-                float u = v.remaining / v.duration, freq = 220;
-                switch (v.sound) {
-                case Sound::Shot:
-                    freq = 600 + 1800 * u;
-                    break;
-                case Sound::Kill:
-                    freq = 110 + 500 * u * u;
-                    break;
-                case Sound::Hit:
-                    freq = 45 + 90 * u;
-                    break;
-                case Sound::Jump:
-                    freq = 350 + 750 * (1 - u);
-                    break;
-                case Sound::Zap:
-                    freq = 60 + 1800 * u * u;
-                    break;
-                case Sound::Wave:
-                    freq = 220 * (1 + int((1 - u) * 4));
-                    break;
-                case Sound::Pickup:
-                    freq = 660 + 660 * (1 - u);
-                    break;
-                case Sound::Warp:
-                    freq = 55 + 1500 * (1 - u) * (1 - u);
-                    break;
-                case Sound::PoweredShot:
-                    freq = 1000 + 2200 * u;
-                    break;
-                case Sound::Excellent:
-                case Sound::OneUp:
-                    freq = 440 + 880 * (1 - u);
-                    break;
-                case Sound::Pulse:
-                    freq = 120 + 400 * u;
-                    break;
-                case Sound::Ricochet:
-                    freq = 1700 * u + 600;
-                    break;
-                case Sound::GateYes:
-                case Sound::GateYesAlt:
-                case Sound::Snatch:
-                    freq = 600 + 400 * (1 - u);
-                    break;
-                }
-                v.phase += freq / 48000.f;
-                if (v.phase >= 1)
-                    v.phase -= std::floor(v.phase);
-                float wave = std::sin(v.phase * 6.2831853f);
-                if (v.sound == Sound::Zap || v.sound == Sound::Hit)
-                    wave = wave * .5f + std::sin(v.phase * 31.4159f) * .5f;
-                mixed += wave * u * (v.sound == Sound::Shot ? .045f : .12f);
-                v.remaining -= 1 / 48000.f;
             }
-        for (int channel = 0; channel < 2; channel++)
+        for (int channel = 0; channel < 2; channel++) {
+            float music = out[i * 2 + channel] * audio.musicVolume * (1 - .22f * audio.duck);
+            float effects = .4f * std::tanh((channel ? right : left) / .4f) * audio.effectsVolume *
+                            (1 - .6f * audio.duck);
+            float recorded = channel ? voiceRight : voiceLeft;
             out[i * 2 + channel] =
-                audio.muted ? 0
-                            : std::tanh(out[i * 2 + channel] + mixed + (channel ? right : left));
+                audio.muted ? 0 : std::tanh(music + effects + recorded * audio.voiceVolume);
+        }
         audio.samples++;
     }
 }
