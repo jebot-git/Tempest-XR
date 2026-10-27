@@ -57,6 +57,36 @@ int main() {
         g.steer(1);
         g.tick(.01f);
         CHECK(g.lives == 2);
+        // Both boundaries of each bonus family preserve the ship-follow rig.
+        for (int type = 0; type < 3; ++type) {
+            g.start();
+            g.steer(3);
+            step(g, .3f);
+            auto entry = g.xrCameraPosition();
+            g.startBonus(type);
+            auto same = g.xrCameraPosition();
+            CHECK(std::hypot(same.x - entry.x, same.y - entry.y) < .0001f);
+            CHECK(std::abs(same.z - entry.z) < .0001f);
+            g.steer(18.75f);
+            g.bonusDown = true;
+            while (!g.bonusFinished)
+                g.tick(1.f / 120);
+            Vec3 last;
+            while (g.mode == Mode::Bonus) {
+                last = g.xrCameraPosition();
+                g.tick(1.f / 120);
+            }
+            same = g.xrCameraPosition();
+            CHECK(std::hypot(same.x - last.x, same.y - last.y) < .03f);
+            CHECK(std::abs(same.z - last.z) < .03f);
+            while (g.mode == Mode::Transition) {
+                last = g.xrCameraPosition();
+                g.tick(1.f / 120);
+            }
+            same = g.xrCameraPosition();
+            CHECK(std::hypot(same.x - last.x, same.y - last.y) < .03f);
+            CHECK(std::abs(last.z + Game::warpTravel - same.z) < .03f);
+        }
         // Tanker variants must release the corresponding two contents.
         for (auto pair :
              {std::pair{Kind::Tanker, Kind::Flipper}, std::pair{Kind::FuseTanker, Kind::Fuseball},

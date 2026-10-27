@@ -90,6 +90,7 @@ class Game {
     Mode pausedFrom = Mode::Playing;
     Vec3 nextSpawn;
     Vec3 deathShip;
+    Vec3 transitionOffset, bonusEntryOffset;
     std::vector<float> spawnTimers;
     std::vector<Enemy> pending;
     int killsToPowerup = 1, bonusCourse = 0;

@@ -38,6 +38,7 @@ void Game::loadWeb() {
     lane = std::clamp(web.start, 0, web.lanes() - 1);
     visualLane = float(lane);
     wheelRemainder = 0;
+    transitionOffset = {};
     waveTime = 0;
     fireTimer = 0;
     const auto &wave = campaignWaves[size_t(level - 1)];
@@ -162,8 +163,11 @@ Vec3 Game::enemyPosition(const Enemy &e) const {
 Vec3 Game::shipPosition() const {
     if (mode == Mode::GameOver)
         return deathShip;
-    if (isBonus())
-        return bonusCursor() + Vec3{0, 0, -3.8f};
+    if (isBonus()) {
+        float t = std::clamp(bonusTime / 1.5f, 0.f, 1.f);
+        float blend = t * t * (3 - 2 * t);
+        return bonusCursor() + Vec3{0, 0, -3.8f} + bonusEntryOffset * (1 - blend);
+    }
     float distance = warpDistance();
     Vec3 p = position(visualLane, distance / 9);
     float blend = std::clamp((distance - 9) / (warpTravel - 9), 0.f, 1.f);
@@ -171,6 +175,8 @@ Vec3 Game::shipPosition() const {
     p.x = p.x * (1 - blend) + nextSpawn.x * blend;
     p.y = p.y * (1 - blend) + nextSpawn.y * blend;
     p.z += jumpLift();
+    float t = transitionDepth();
+    p = p + transitionOffset * (1 - t * t * (3 - 2 * t));
     return p;
 }
 void Game::burst(Vec3 p, int color, int count) {
@@ -354,6 +360,9 @@ bool Game::pulseActive() const {
     return std::fmod(waveTime, std::max(.4f, period)) > period * .65f;
 }
 void Game::beginTransition(int destination) {
+    // Carry the actual outgoing camera/ship location into the tunnel, including
+    // bonus coordinates, instead of snapping back to the old web's rim.
+    transitionOffset = shipPosition() - (position(visualLane, 0) + Vec3{0, 0, jumpLift()});
     targetLevel = std::clamp(destination, 1, 100);
     auto next = makeWeb(targetLevel);
     int first = std::clamp(next.start, 0, next.lanes() - 1);
@@ -383,6 +392,7 @@ void Game::completeWave() {
     beginTransition(level + 1);
 }
 void Game::startBonus(int type) {
+    Vec3 entry = shipPosition();
     mode = Mode::Bonus;
     bonusType = std::clamp(type, 0, 2);
     bonusCourse = bonusRuns[size_t(bonusType)]++ % 8;
@@ -391,6 +401,7 @@ void Game::startBonus(int type) {
     bonusGate = 0;
     bonusHits = 0;
     bonusX = bonusY = bonusAngle = 0;
+    bonusEntryOffset = entry - (bonusCursor() + Vec3{0, 0, -3.8f});
     bonusCheckTime = 0;
     bonusResultTime = 0;
     bonusFinished = bonusWon = false;
