@@ -57,6 +57,8 @@ float Game::tunnelTrackAngle(int ahead) const {
 bool Game::tunnelOnTrack() const {
     int phase = int(std::floor(bonusAngle * 256 / tau)) & 255;
     int target = tunnel[size_t((tunnelHead + 8) & 63)].track;
+    phase = (-phase) & 255;
+    target = (-target) & 255;
     int distance = std::abs(phase - target);
     // Literal xono/xono2 wrap: the source uses 255-distance, not 256-distance.
     if (distance > 127)

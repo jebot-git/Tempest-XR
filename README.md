@@ -2,7 +2,7 @@
 
 A source-informed **Tempest 2000** recreation for Linux desktop and native
 OpenXR, with mouse-wheel controls, a ship-following XR camera, the original
-Jaguar music and sound samples, original shaded meshes and raster artwork/fonts, and a 100-wave campaign.
+Jaguar music and sound samples, original shaded meshes and raster artwork/fonts, and the imported Jaguar campaign data.
 
 Detailed fidelity status and remaining work: [behavior audit](docs/BEHAVIOR_AUDIT.md).
 
@@ -38,10 +38,12 @@ closed webs wrap, and open webs stop at their ends.
 |---|---|
 | Wheel | Move on rim; select an unlocked starting web on the title screen |
 | Left mouse | Start in XR/SBS; hold to fire repeatedly |
-| Right mouse / Z | Superzapper: first use clears enemies, second kills one |
+| Right mouse / Z | Paced Superzapper: first use sweeps eligible enemies, second zaps one |
 | Middle mouse / Space | Jump after collecting the jump powerup |
 | Left/Right or A/D | Alternative steering / starting-web selection |
-| Enter | Start/retry; start a new campaign after victory |
+| Enter | Start/retry; save initials when entering a high score |
+| K on title | Change saved player access key |
+| O on title | Toggle Beastly replay after completing the campaign |
 | P / Escape | Pause/resume; Escape returns game-over/victory to title |
 | V | Enter native OpenXR / return the game to desktop |
 | Alt+Tab | Pause native XR and restore the previous DomeD desktop |
@@ -77,7 +79,9 @@ delays, repeat intervals and generation budgets. The source wave header is an
 **enemy count**, not a duration: `newgen` decrements it after launching an
 object. The original final-wave alias is preserved. Web selection follows
 `16 + ((level - 1) & 31)` from the shared 48-entry table. Original speed,
-pulse and powerup-delay tables drive progression, with victory after wave 100.
+pulse and powerup-delay tables drive progression. As in `sweb0`, clearing displayed
+web 99 and completing its flight ends the campaign and unlocks Beastly mode. The
+100th imported schedule remains available for diagnostics with `--level 100`.
 
 The generator roster includes flippers, three tanker variants, spikers,
 fuseballs, pulsars, two super-flipper variants, mirrors, hostile droids
@@ -96,14 +100,25 @@ order so an enemy farther down the lane cannot steal a shot from a rim target.
 
 Powerups progress through **particle laser → points → jump → points → friendly
 droid → bonus token**, followed by additional point awards. The first killed
-enemy offers a pickup; subsequent drops use the imported per-wave kill delay.
+enemy offers a pickup after its source rez animation; subsequent drops use the imported per-wave kill delay.
 Collected droids expire at web clearance. Catching a pickup during clearance schedules an early droid on the first pickup of the next web. Three tokens earn a bonus after the clearance flight. Ring, tunnel and psychedelic
 families use the original course layouts/order. Packed gate delays control spacing;
 up/down gates impart a vertical impulse, lightning gates increase speed by one
 eighth, and pyramid gates finish the course. Ring accuracy awards 250/500/750
 points using the source scoring rule. Psycho mode keeps its source delay override
 and scoring rule. Ring/psycho completion awards 20,000 points. Successful bonuses warp five levels, with the source's
-late-campaign limit on skipping. Failing a bonus costs no life.
+late-campaign limit on skipping. Failing a bonus costs no life. Successful ring/psycho courses show the
+pyramid/feedback victory scene for 401 source frames. Point pickups have the
+original rare early-exit/infinite-zap surprise. Clearance awards no flat bonus.
+
+Beastly doubles scores, halves player-shot speed, slows player firing, removes
+ordinary flipper pauses and permits eight alien bullets. The title screen shows
+the original default high-score table, instructions and credits. Qualifying
+scores accept three initials: wheel changes the current letter, LMB advances,
+RMB goes back, and Enter saves; typing is also supported. K selects one of four
+source access-key names, with independent unlocked webs and Beastly unlocks.
+`records.json` stores the table and keys alongside the existing `settings` file.
+Pause, Game Over, victory, title and HUD text appear directly over the scene.
 
 Jump lasts 0.85 seconds with a three-second recharge. Enemy bullets can be
 intercepted with normal, particle-laser or friendly-droid fire. Death removes
@@ -249,13 +264,11 @@ Useful flags: `--desktop`, `--level 1..100`, `--demo` (autoplay), `--frames N`,
 `--capture image.ppm`, `--no-audio`, `--help`. Physical headset/WiVRn tracking,
 streaming performance and comfort still require target-device validation.
 
-This remains a source-informed recreation. Enemy state machines and original
-tunnel rules are translated, with focused regressions. Full object-slot
-allocation, friendly-droid patrol, rare pickups, individual effect lifecycles,
-ending flows and music fade remain incomplete. Camera motion, mouse gain,
-modern RGB shading and mixing are adapted for desktop/XR. The original gate layout, delay and
-modifier data drive the bonus implementation, with source-based first-ring approach timing. The tunnel translates the original green-track/trail rules, pattern generators,
-64-segment buffer and continuous score; its geometry, colors and mouse gain are
-adapted for desktop/XR. See the behavior audit.
-Original Classic/Plus/two-player and Beastly modes, the full high-score table and
-EEPROM key algorithms remain outside this implementation.
+This remains a source-informed recreation. Source countdowns, distant-pixel
+entry, allocation/backpressure, independent shot ownership, friendly-droid
+pursuit, rare pickups, effect lifecycles, music fade and ending/Beastly flows
+have regression coverage. Collision ordering at 120 Hz, camera motion, mouse
+gain, XR projection, RGB shading and feedback are adapted. Original
+Classic/Plus/cooperative/head-to-head variants, full source option/attract
+choreography and physical EEPROM encoding remain outside this implementation.
+See the [current behavior audit](docs/BEHAVIOR_AUDIT.md) for precise limits.

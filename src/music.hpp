@@ -17,6 +17,7 @@ class Music {
     void render(float *stereo, size_t frames);
     void pause(bool value);
     bool available() const;
+    bool transitioning() const;
     static const char *trackForLevel(int level, bool title = false);
 };
 } // namespace tempest

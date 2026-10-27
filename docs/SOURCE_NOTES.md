@@ -166,3 +166,39 @@ bounds remain the recreation's wider bounds so its imported courses remain
 navigable. Hardware adaptive rotary sensitivity and exact original projection
 remain adaptations. Tunnel `tunrun` already accumulated rotary momentum without
 friction; it continues to use wheel-only rotation and opposite input for braking.
+
+## Gap fills and presentation boundaries
+
+`tests/gap-test.cpp` protects the eight reproduced audit cases, including all
+256×256 tunnel phase pairs. `ipix` entry uses a 150-source-update counter,
+`setnewgen`/`newgen` integer expiry and actual capacity backpressure. A native
+allocation ledger follows `afree=32`, `noclog=21`, tanker reservations and spike
+accounting. Player/droid shots, their reflected forms and `xshot` remnants retain
+independent eight-slot ownership. Rendering particles do not each consume an
+object, just as the source GPU's dots do not each consume a linked-list entry.
+
+`beastrail`, `uppweb`, `flipcollie` and `crossrail` determine hit/zap eligibility.
+In particular `mcollie` bypasses the Superzapper for climbing beasts as well as
+mirrors and climbing hostile droids. A fuseball on a rail does not call `collie`.
+The port retains swept 120 Hz contact resolution rather than Jaguar list order.
+
+`src/fireworks.hpp` contains the pinned `fw_test` bytes (yak.s:19124), executed
+by the `fw_run` command interpreter in `src/effects.cpp`. Flight counters,
+signed assignments, nested loops, waits, gravity and sphere expiry are translated;
+positions/velocities are scaled into XR meters. Ring/sphere and bullet/pickup
+feedback have independent lifecycles. Shaders and pixel projection use OpenGL,
+not an emulation of the GPU/blitter's integer CRY pipeline. Ring/psycho victory
+uses the 401-frame `vicrun` interval and a pyramid/echo presentation. Music changes
+queue an outgoing fade for `domod`'s 51 frames at 48 kHz (40,800 PCM frames).
+
+The `sweb0` threshold occurs after `czoom2` increments cwave: finishing displayed
+web 99 reaches cwave 99 and unlocks Beastly. The 100th schedule is a source alias
+retained for diagnostics. Selected-web starts use `slebon`'s arithmetic;
+clearance itself adds no points. Point pickups implement `suprise`; One Up uses
+the 50-frame holiday except in the tunnel. Source PCM remains the only speech.
+
+The ten default scores and YAK/COW/ZOO/AXE access names come from `defaults`.
+Native JSON stores score initials and independent key progress/unlocks, replacing
+EEPROM bytes and write timing. The title's score/tutorial/credit carousel and
+keyboard option controls are native frontend adaptations; Classic/Plus and
+two-player game variants remain outside the Tempest 2000 campaign scope.

@@ -72,6 +72,8 @@ int main() {
         g.enemies = {{Kind::Flipper, g.lane, .4f}, {Kind::Tanker, 4, .7f}};
         g.zap();
         REQUIRE(g.zaps == 1);
+        REQUIRE(g.score == 0);
+        advance(g, .15f);
         REQUIRE(g.score == 250);
         g.zap();
         REQUIRE(g.score == 250);
@@ -109,7 +111,7 @@ int main() {
         g.tick(.01f);
         REQUIRE(g.mode == Mode::Playing);
         g.zap();
-        g.tick(.01f);
+        advance(g, .075f);
         REQUIRE(g.mode == Mode::Transition);
         advance(g, 2.5f);
         REQUIRE(g.level == 2);
@@ -123,11 +125,12 @@ int main() {
         g.tick(1.f / 60);
         REQUIRE(g.spikes[3] < .4f);
         g.zap();
-        g.tick(.01f);
+        advance(g, .075f);
         REQUIRE(g.spikes[3] < .4f); // Superzapper leaves spikes behind.
-        g.shots = {{3, .39f, .38f}};
+        float tip = g.spikes[3];
+        g.shots = {{3, tip - .005f, tip - .005f}};
         g.tick(.01f);
-        REQUIRE(g.spikes[3] > .41f && g.spikes[3] < .42f);
+        REQUIRE(std::abs(g.spikes[3] - tip - 3.f / 160) < .00001f);
         g.start();
         g.invulnerable = 0;
         g.enemiesRemaining = 0;

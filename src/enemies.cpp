@@ -12,11 +12,13 @@ float Game::enemySpeed(Kind kind) const {
     return kind == Kind::Pulsar ? .5f * 60 / 160 : float(fixed) / 65536 * 60 / 160;
 }
 void Game::beginFuseCrossing(Enemy &e, int direction) {
-    if (direction < 0 && e.lane == 0 && !web.closed)
+    int rail = e.rail >= 0 ? e.rail : e.lane;
+    if ((direction < 0 && rail == 0 && !web.closed) ||
+        (direction > 0 && rail == web.lanes() && !web.closed))
         return; // set_fuseleft waits at an unconnected left edge.
     e.direction = direction;
-    e.travelFrom = e.lane;
-    e.travelTo = web.closed ? boundedLane(e.lane + direction) : e.lane + direction;
+    e.travelFrom = rail;
+    e.travelTo = web.closed ? boundedLane(rail + direction) : rail + direction;
     if (direction < 0)
         e.lane = boundedLane(e.travelTo); // Right crossings change lane only on arrival.
     e.crossSteps = 15;
@@ -39,6 +41,8 @@ void Game::tickSpecialEnemy(Enemy &e, float dt) {
                 }
                 e.lane = free.empty() ? shortest : free[size_t(int(randf(0, float(free.size()))))];
                 if (!hasSpike(e.lane)) {
+                    if (objectSlots() >= 32)
+                        continue;
                     spikes[size_t(e.lane)] = 1 - 30.f / 160;
                     spikePresent[size_t(e.lane)] = true;
                     superSpikes[size_t(e.lane)] = randf(0, 256) < 2 * std::min(level - 1, 127);
@@ -79,6 +83,7 @@ void Game::tickSpecialEnemy(Enemy &e, float dt) {
             } else if (--e.crossFrames < 0) {
                 e.crossFrames = 1;
                 if (--e.crossSteps < 0) {
+                    e.rail = e.travelTo;
                     if (e.direction > 0)
                         e.lane = boundedLane(e.travelTo);
                     e.fuseMotion = FuseMotion::Climbing;
@@ -124,12 +129,176 @@ void Game::tryAlienFire(Enemy &e, float dt, std::vector<Enemy> &children) {
         if (--alienFireCounter >= 0)
             continue;
         alienFireCounter = 112;
-        int capacity = 1 + std::min(3, (level - 1) / 8);
+        int capacity = beastly ? 8 : 1 + std::min(3, (level - 1) / 8);
         auto bullet = [](const auto &a) { return !a.dead && a.kind == Kind::EnemyShot; };
         auto used = std::count_if(enemies.begin(), enemies.end(), bullet) +
                     std::count_if(children.begin(), children.end(), bullet);
-        if (e.depth > 60.f / 160 && used < capacity)
+        if (e.depth > 60.f / 160 && used < capacity && objectSlots() + int(children.size()) < 32)
             children.push_back(makeEnemy(Kind::EnemyShot, e.lane, e.depth, 1));
     }
+}
+size_t Game::shotSlots(bool ally) const {
+    size_t remnants = size_t(std::count_if(effects.begin(), effects.end(), [=](const auto &fx) {
+        return fx.kind == EffectKind::Splatter && fx.ally == ally;
+    }));
+    return remnants +
+           size_t(std::count_if(shots.begin(), shots.end(),
+                                [=](const auto &s) { return !s.dead && s.ally == ally; })) +
+           size_t(std::count_if(enemies.begin(), enemies.end(), [=](const auto &e) {
+               return !e.dead && reflected(e.kind) && e.ally == ally;
+           }));
+}
+int Game::objectSlots() const {
+    int used = 0;
+    for (const auto &e : enemies) {
+        if (e.dead || reflected(e.kind))
+            continue; // Reflected projectiles keep their owner's bullet allocation.
+        used += e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker
+                    ? 3
+                    : 1;
+    }
+    for (int i = 0; i < web.lanes(); ++i)
+        used += hasSpike(i);
+    used += int(pending.size());
+    used += int(std::count_if(effects.begin(), effects.end(), [](const auto &fx) {
+        return fx.kind != EffectKind::Splatter && fx.kind != EffectKind::Score;
+    }));
+    return used;
+}
+int Game::physicalSlots() const {
+    // Include reserved tanker children so score effects cannot consume their room.
+    return 2 + int(droidActive) + objectSlots() + int(shots.size()) +
+           int(std::count_if(enemies.begin(), enemies.end(),
+                             [](const auto &e) { return !e.dead && reflected(e.kind); })) +
+           int(std::count_if(effects.begin(), effects.end(), [](const auto &fx) {
+               return fx.kind == EffectKind::Splatter || fx.kind == EffectKind::Score;
+           }));
+}
+bool Game::canGenerate() const {
+    int spikesUsed = 0;
+    for (int i = 0; i < web.lanes(); ++i)
+        spikesUsed += hasSpike(i);
+    // afree starts at 32; noclog starts at 21. Spike objects reduce both.
+    return 32 - objectSlots() > 21 - spikesUsed && physicalSlots() < 62;
+}
+void Game::startZap(bool single, bool infinite) {
+    infiniteZap = infinite;
+    zapActive = true;
+    zapSingle = single;
+    zapClock = 0;
+    zapFrames = 0;
+    zapTime = single ? .45f : 1.1f;
+}
+void Game::tickZap(float dt) {
+    if (!zapActive)
+        return;
+    zapClock += double(dt) * 60;
+    while (zapClock >= 1 - .000001 && zapActive) {
+        zapClock -= 1;
+        if (++zapFrames % 4)
+            continue;
+        auto target = std::find_if(enemies.begin(), enemies.end(), [](const auto &e) {
+            return !e.dead && !e.entering && shotVulnerable(e) && e.kind != Kind::Powerup &&
+                   e.kind != Kind::Mirror && !reflected(e.kind) &&
+                   !(e.kind == Kind::Adroid && e.droidMotion == DroidMotion::Climbing) &&
+                   !(e.kind == Kind::Beast && e.motion == FlipperMotion::Climbing);
+        });
+        if (target == enemies.end()) {
+            zapActive = false;
+            continue;
+        }
+        destroy(*target, true);
+        if (infiniteZap) {
+            zapFrames -= 4;
+            zapClock += 4;
+        }
+        if (zapSingle)
+            zapActive = false;
+    }
+}
+void Game::tickDroid(float dt) {
+    droidClock += double(dt) * 60;
+    while (droidClock >= 1 - .000001) {
+        droidClock -= 1;
+        int logicalLane = droidSteps > 8 ? droidFrom
+                          : droidSteps   ? droidTo
+                                         : boundedLane(int(std::round(droidLane)));
+        if (--droidFireFrames < 0) {
+            droidFireFrames = 5;
+            if (shotSlots(true) < 8 && physicalSlots() < 64) {
+                Shot shot{logicalLane};
+                shot.ally = true;
+                shots.push_back(shot);
+            }
+        }
+        if (droidSteps) {
+            --droidSteps;
+            int direction = directionTo(droidFrom, droidTo);
+            droidLane = float(droidFrom) + float(direction) * (16 - droidSteps) / 16;
+            if (web.closed)
+                droidLane = std::fmod(droidLane + web.lanes(), float(web.lanes()));
+        } else {
+            const Enemy *target = nullptr;
+            for (const auto &e : enemies)
+                if (!e.dead && hostile(e.kind) && (!target || e.depth <= target->depth))
+                    target = &e;
+            droidFrom = logicalLane;
+            int direction = directionTo(logicalLane, target ? target->lane : 0);
+            if (web.closed && target && std::abs(target->lane - logicalLane) == web.lanes() / 2)
+                direction = -direction;
+            if (!direction)
+                direction = 1; // lor chooses right when target and current lane coincide.
+            droidTo = boundedLane(logicalLane + direction);
+            droidSteps = 16;
+        }
+    }
+}
+void Game::animateClearance(float dt) {
+    tickZap(dt);
+    for (auto &e : enemies) {
+        if (e.dead || e.kind == Kind::Powerup)
+            continue;
+        e.age += dt;
+        if (flipperBody(e)) {
+            if (e.motion == FlipperMotion::Turning) {
+                e.turnAngle += dt * rospeeds[1] * 60 * (e.kind == Kind::SuperFlipper ? 2 : 1);
+                if (e.turnAngle >= e.turnArc) {
+                    e.turnAngle = e.turnArc;
+                    e.motion = FlipperMotion::Stopped;
+                    e.stopTime =
+                        beastly ? 0
+                                : float(pauses[size_t(crossdels[size_t(rospeeds[1])])] + 1) / 60;
+                }
+            } else if ((e.stopTime -= dt) <= 0)
+                startFlipperTurn(e);
+        } else if (e.kind == Kind::Fuseball || e.kind == Kind::Adroid || e.kind == Kind::Spiker)
+            tickSpecialEnemy(e, dt);
+        else if (e.kind == Kind::PulsarSpark) {
+            e.sparkTime -= dt;
+            while (e.sparkTime <= 0) {
+                e.sparkTime += 5.f / 60;
+                if (!web.closed &&
+                    (e.lane + e.direction < 0 || e.lane + e.direction >= web.lanes()))
+                    e.direction = -e.direction;
+                e.lane = boundedLane(e.lane + e.direction);
+            }
+        } else if (reflected(e.kind) || e.kind == Kind::EnemyShot) {
+            e.depth -= dt * (e.kind == Kind::EnemyShot
+                                 ? .5625f
+                                 : shotSpeed() * (e.kind == Kind::BeastShot ? .5f : 1));
+            if (e.depth < -29.f / 160)
+                e.dead = true;
+        }
+    }
+    for (auto &shot : shots) {
+        shot.previous = shot.depth;
+        shot.depth += dt * shotSpeed();
+    }
+    shots.erase(std::remove_if(shots.begin(), shots.end(),
+                               [](const auto &s) { return s.dead || s.depth > 1.05f; }),
+                shots.end());
+    enemies.erase(
+        std::remove_if(enemies.begin(), enemies.end(), [](const auto &e) { return e.dead; }),
+        enemies.end());
 }
 } // namespace tempest

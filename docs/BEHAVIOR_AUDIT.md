@@ -4,6 +4,77 @@ Reference: [mwenge/tempest2k, revision 8b50b467](https://github.com/mwenge/tempe
 
 **This is a recreation with imported data, not a complete behavioral port.** Passing the campaign tests establishes that the imported schedules and implemented rules work together; it does not establish that every original enemy state, collision or effect matches. Earlier documentation describing the roster as implemented should be read with the qualifications below.
 
+## Current gap-fill status (2026-10-27)
+
+This section supersedes the historical findings below. The eight reproduced
+post-8a47fb9 cases now have dedicated regressions in `tests/gap-test.cpp`.
+
+- Beast hits use the pre-movement climbing state, including rim entry; hostile
+  droid shield hits cancel the transition to above-rim patrol. Reflections keep
+  the firing owner's bullet entitlement.
+- Both token and button zaps use one four-source-frame selection path. Immunity
+  follows the collision handler, including climbing beasts, mirrors/reflections,
+  climbing hostile droids, fuseballs outside their central crossing window and
+  invulnerable flipper turns. The previous audit incorrectly treated climbing
+  beasts and rail-bound fuseballs as ordinary zap targets.
+- Generation uses integer half-periods and signed-negative expiry, with wave-one
+  dispatch at 120 Hz ticks 122/364/606/848. Generated enemies (except spikers)
+  enter as distant pixels for 150 source updates; pulsars wait for phase <3.
+- Player and friendly droid each have eight bullet slots. Reflections and the
+  eleven-frame `xshot` splatter retain the original owner's slot. The droid uses
+  sixteen-step pursuit, halfway collision-lane changes and six-frame firing,
+  including firing/patrolling when no target is present.
+- Allocation tracks the 32 alien/effect allowance, 21-slot generation reserve,
+  three-slot tanker reservations, spikes reducing both `afree` and `noclog`,
+  explosion/pickup occupancy and a 64-object physical limit. C++ collections and
+  GPU particles replace the Jaguar linked lists; list insertion/sub-frame
+  collision ordering remain adaptations.
+- Open-web fuseballs preserve their arrived outer rail independently of their
+  collision lane. Tunnel phase contact is checked against a literal reference
+  for every one of the 65,536 track/player byte combinations.
+- Retained enemies/projectiles animate safely through clearance. The warning is
+  limited to displayed webs 4–16, suppressed for early exits, and uses the source
+  250-frame first message phase. The duplicate particle `WEB CLEAR` was removed.
+  Menu, Pause, Game Over and victory title cards, plus the score/help HUD strips,
+  now have transparent backgrounds.
+- The invented clearance award is gone. Selected-web starts use `slebon`'s
+  `(level-1)*(2600+200*(level-1))` reward. Ordinary point pickups include the rare
+  nine-byte-value `suprise` branch: 3,000 points, infinite-zap pass and early exit.
+  One Up cycles the web for 50 frames while its graphic lasts 151 signed-counter
+  frames; tunnel extra lives suppress that holiday and graphic.
+- Effects now have separate fixed-60-Hz ring, sphere, bullet-splatter, collected
+  pickup and score-expansion lifecycles. The original `fw_test` command bytes
+  drive fireworks, including waits, nested loops, launch vectors, gravity and
+  flight-to-sphere expiry. Successful ring/psycho bonuses hold the pyramid/echo
+  presentation for the source's 401-frame interval. Geometry, RGB colors and
+  meter scales remain native XR renderings of those effect families.
+- Music retains and fades the outgoing module for `domod`'s 51-frame delay,
+  then starts the queued module; pause freezes both. Random-bonus destruction
+  uses original sample 8. All voices remain original samples only.
+- After displayed web 99's clearance flight, the source `cwave>=99` handoff
+  unlocks Beastly replay: doubled scores, half-speed player shots, slower player
+  firing, eight alien bullets and no ordinary flipper rest. All 100 imported
+  schedules remain accessible to diagnostic fixtures.
+- The original ten default scores and four access-key names are present.
+  Wheel/keyboard initials entry, per-key progress/Beastly unlock and the score
+  table persist atomically in `records.json`; legacy settings stay readable.
+  The desktop title rotates scores, instructions and original credits. Menu K
+  changes access key, and O toggles unlocked Beastly play.
+
+Remaining scope: the original Classic/Plus/cooperative/head-to-head variants,
+full original option/attract choreography and physical EEPROM encoding are not
+ported. Native access-key storage replaces the EEPROM representation. Jaguar
+GPU/blitter rasterization, CRY feedback/melt arithmetic, message shears and some
+bitmap breakup/color details remain approximations. Mouse calibration, rotary
+secondary-pad fall-through and XR projection retain the adaptations documented
+in SOURCE_NOTES. Physical-headset validation remains outstanding. This is not a
+claim of instruction-for-instruction behavior or pixel-identical presentation.
+
+## Historical audit and implementation notes
+
+The sections below record earlier revisions and their then-open findings.
+Consult the current status above when deciding what still needs implementation.
+
 ## Changes from this review
 
 | Issue | Original evidence | Corrected behavior |

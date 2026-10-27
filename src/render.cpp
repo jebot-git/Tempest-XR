@@ -364,9 +364,15 @@ void Renderer::flush() {
 }
 void Renderer::enemy(const Game &g, const Enemy &e) {
     Vec3 p = g.enemyPosition(e);
+    if (e.entering) {
+        line(p, p + Vec3{.012f, 0, 0}, enemyColor(e.kind));
+        return;
+    }
     Vec3 tangent = g.enemyTangent(e);
     Vec3 normal = {-tangent.y, tangent.x, 0};
     float s = e.kind == Kind::Tanker ? .13f : .095f;
+    if (e.kind == Kind::Powerup && e.pickupFrames > 0)
+        s *= 1 + float(e.pickupFrames) / 12;
     auto point = [&](float x, float y) { return p + tangent * (x * s) + normal * (y * s); };
     Color c = enemyColor(e.kind);
     const char *original = nullptr;
@@ -596,7 +602,10 @@ void Renderer::deathWorld(const Game &g) {
 void Renderer::grid(const Game &g, Vec3 offset, float alpha) {
     int n = g.web.lanes();
     Color theme = cyan;
-    if (g.level > 1)
+    // The graphic outlives the 50-frame web-color holiday.
+    if (g.oneUpTime > 101.f / 60)
+        theme = spectrum(std::floor(g.time * 15) * .08f);
+    else if (g.level > 1)
         theme = spectrum(.48f + float(g.level - 1) * .09f);
     for (int i = 0; i <= n; i++) {
         if (g.web.closed && i == n)
@@ -742,6 +751,29 @@ void Renderer::tunnelWorld(const Game &g) {
     line(cursor + Vec3{0, -.12f, 0}, cursor + Vec3{0, .12f, 0}, white);
 }
 void Renderer::bonusWorld(const Game &g) {
+    if (g.bonusFinished && g.bonusWon && g.bonusType != 1) {
+        Vec3 center = g.bonusCursor() + Vec3{0, 0, -7};
+        float frame = std::floor(g.bonusTime * 60);
+        float angle = (std::abs(float(int(frame / 4) & 127) - 63) - 31) * 6.2831853f / 256;
+        for (int echo = 12; echo >= 0; --echo) {
+            float a = angle - echo * .035f, size = .6f + echo * .12f;
+            Vec3 tip = center + Vec3{std::sin(a) * size, std::cos(a) * size, -.8f};
+            for (int side = 0; side < 4; ++side) {
+                float b = a + side * 1.5707963f, c = b + 1.5707963f;
+                Vec3 p = center + Vec3{std::cos(b) * size, std::sin(b) * size, .4f};
+                Vec3 q = center + Vec3{std::cos(c) * size, std::sin(c) * size, .4f};
+                Color color = spectrum(frame / 256 + side * .1f, 1.f / (1 + echo * .3f));
+                line(p, q, color);
+                line(p, tip, color);
+            }
+        }
+        flush();
+        glPushMatrix();
+        glTranslatef(center.x, center.y, center.z + 1);
+        drawRaster("excellent", -.6f, .25f, 1.2f, -.5f);
+        glPopMatrix();
+        return;
+    }
     if (g.bonusType == 1) {
         tunnelWorld(g);
         return;
@@ -820,6 +852,58 @@ void Renderer::bonusWorld(const Game &g) {
     for (auto &p : g.particles)
         line(p.pos, p.pos - p.velocity * .06f, spectrum(float(p.color) / 31, p.life / p.maxLife));
 }
+void Renderer::effectsWorld(const Game &g) {
+    constexpr float tau = 6.2831853f;
+    for (const auto &fx : g.effects) {
+        Color color = spectrum(float(fx.color) / 256, 1.f);
+        if (fx.kind == EffectKind::Score) {
+            flush();
+            std::string sprite = std::to_string(fx.color);
+            if (fx.color == 1)
+                continue;
+            glPushMatrix();
+            glTranslatef(fx.pos.x, fx.pos.y + float(fx.frame) * .005f, fx.pos.z);
+            float size = .2f + float(fx.frame) * .006f;
+            drawRaster(sprite, -size, size * .3f, size * 2, -size * .6f,
+                       {1, 1, 1, 1 - float(fx.frame) / 32});
+            glPopMatrix();
+            continue;
+        }
+        if (fx.kind == EffectKind::Splatter || fx.kind == EffectKind::Pickup) {
+            float rotation =
+                float(fx.frame * (fx.kind == EffectKind::Splatter ? 3 : 5)) * tau / 256;
+            float radius = fx.kind == EffectKind::Splatter ? .06f + fx.frame * .003f : .12f;
+            for (int i = 0; i < 4; ++i) {
+                float a = rotation + i * tau / 4;
+                Vec3 p = fx.pos + Vec3{std::cos(a) * radius, std::sin(a) * radius, 0};
+                Color c = fx.kind == EffectKind::Pickup ? spectrum(float(fx.frame) / 16) : amber;
+                line(fx.pos, p, c);
+            }
+            continue;
+        }
+        if (fx.kind == EffectKind::Firework && fx.frame <= fx.duration) {
+            line(fx.pos, fx.pos - fx.velocity * .04f, color);
+            continue;
+        }
+        bool sphere = fx.kind == EffectKind::Sphere || fx.kind == EffectKind::Firework;
+        int age = fx.kind == EffectKind::Firework ? fx.frame - fx.duration - 1 : fx.frame;
+        float radius = age * (sphere ? .025f : .015f);
+        color.a = std::clamp(
+            1 - float(age) / (fx.kind == EffectKind::Firework ? 63 : fx.duration + 1), 0.f, 1.f);
+        int rings = sphere ? (fx.kind == EffectKind::Firework ? 32 : 64) : 3;
+        for (int ring = 0; ring < rings; ++ring) {
+            int pixels = sphere ? (fx.kind == EffectKind::Firework ? 8 : 16) : 16 - ring * 2;
+            float latitude = sphere ? -1.5707963f + (ring + .5f) * 3.14159265f / rings : 0;
+            float r = sphere ? radius * std::cos(latitude) : radius * float(1 << ring);
+            for (int pixel = 0; pixel < pixels; ++pixel) {
+                float phase = (float(pixel) / pixels + ring * .03125f) * tau + g.time;
+                Vec3 p = fx.pos + Vec3{std::cos(phase) * r, std::sin(phase) * r,
+                                       sphere ? std::sin(latitude) * radius : -ring * .225f};
+                line(p, p + Vec3{.012f, .005f, 0}, color);
+            }
+        }
+    }
+}
 void Renderer::world(const Game &g, bool headset) {
     glDisable(GL_LIGHTING);
     glDisable(GL_TEXTURE_2D);
@@ -889,6 +973,7 @@ void Renderer::world(const Game &g, bool headset) {
         auto camera = g.xrCameraPosition();
         glTranslatef(-camera.x, -camera.y, -camera.z);
     }
+    effectsWorld(g);
     if (g.isBonus()) {
         bonusWorld(g);
         flush();
@@ -1051,9 +1136,10 @@ void Renderer::world(const Game &g, bool headset) {
         }
     }
     flush();
-    particleMessage(g, headset);
+    if (headset || g.mode != Mode::GameOver)
+        particleMessage(g, headset);
     if (g.oneUpTime > 0) {
-        Vec3 p = g.shipPosition() + Vec3{0, .8f + (1.8f - g.oneUpTime) * .1f, 1};
+        Vec3 p = g.shipPosition() + Vec3{0, .8f + (151.f / 60 - g.oneUpTime) * .1f, 1};
         glPushMatrix();
         glTranslatef(p.x, p.y, p.z);
         drawRaster("oneup", -.3f, .1f, .6f, -.2f, {1, 1, 1, std::min(1.f, g.oneUpTime)});
@@ -1091,9 +1177,15 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
         result.push_back("START WEB " + number(g.selectedLevel, 2) + " / UNLOCKED " +
                          number(g.unlockedLevel, 2));
         result.push_back("WHEEL SELECT / CLICK OR ENTER TO START");
+        result.push_back(std::string("KEY ") + Game::keyNames[g.accessKey] + " / K CHANGE KEY");
+        if (g.beastlyUnlocked)
+            result.push_back(g.beastly ? "BEASTLY / DOUBLE SCORE / O NORMAL"
+                                       : "O ENABLE BEASTLY MODE");
     } else if (g.mode == Mode::Victory) {
         result.push_back("SUPERSTAR / CAMPAIGN COMPLETE");
-        result.push_back("CLICK OR ENTER TO PLAY AGAIN");
+        result.push_back(g.beastly ? "TOTALLY AWESOME / BEASTLY COMPLETE"
+                                   : "BEASTLY UNLOCKED / O AT LEVEL SELECT");
+        result.push_back("ESC LEVEL SELECT / ENTER PLAY AGAIN");
     } else if (g.mode == Mode::GameOver) {
         result.push_back("GAME OVER / CLICK OR ENTER TO RETRY");
     } else {
@@ -1124,9 +1216,14 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
             result.push_back(g.snatched ? "SHIP CAPTURED / RETURNING TO WEB"
                                         : "SHIP DESTROYED / RETURNING TO WEB");
         else if (g.mode == Mode::Transition)
-            result.push_back("WEB CLEAR / AVOID SPIKES / JUMP TO CLEAR");
+            result.push_back("WEB CLEAR");
         else
             result.push_back("WHEEL MOVE / RMB ZAP / MMB JUMP");
+    }
+    if (g.enteringScore) {
+        result.push_back("HIGH SCORE / " + g.scoreInitials + " / LETTER " +
+                         number(g.scoreCursor + 1));
+        result.push_back("WHEEL LETTER / LMB NEXT / ENTER SAVE");
     }
     if (g.isBonus()) {
         auto instructions = bonusInstructions(g);
@@ -1199,7 +1296,6 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
     glMatrixMode(GL_MODELVIEW);
     glLoadIdentity();
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    rect(0, 0, 1440, 108, {.015f, .025f, .055f, .92f});
     rect(48, 105, 1344, 1, {.2f, .5f, .65f, .3f});
     text(48, 26, "T / 2000", 3, cyan);
     text(48, 64, "VECTOR COMBAT SYSTEM", 1.4f, {.38f, .49f, .65f});
@@ -1209,7 +1305,6 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
     text(750, 49, number(g.best, 7), 2.5f, {.6f, .68f, .8f});
     text(1040, 24, "WEB " + number(g.level, 2) + " / " + g.web.name, 1.5f, cyan);
     text(1040, 55, "LIVES " + number(std::max(0, g.lives)) + "  ZAP " + number(g.zaps), 2, lime);
-    rect(0, 803, 1440, 97, {.015f, .025f, .055f, .95f});
     rect(48, 802, 1344, 1, {.2f, .5f, .65f, .3f});
     if (g.isBonus()) {
         text(48, 829,
@@ -1238,7 +1333,6 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
             text(48, 153 + float(i) * 23, instructions[i], 1.5f, amber);
     }
     if (g.mode == Mode::Menu) {
-        rect(28, 171, 585, 584, {.006f, .012f, .032f, .9f});
         rect(48, 191, 4, 31, cyan);
         text(71, 198, "RECONSTRUCTION / 01", 1.8f, cyan);
         if (!drawRaster("logo", 70, 255, 495, 186))
@@ -1254,15 +1348,56 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
         rect(70, 662, 410, 62, {.07f, .73f, .86f, 1});
         text(100, 683, "> ENTER TO PLAY", 2.3f, {.015f, .04f, .065f});
         text(71, 743, "JEFF MINTER / ATARI 1994 - SOURCE STUDY", 1.05f, {.3f, .43f, .58f});
+        text(720, 195, std::string("PLAYER ACCESS KEY ") + Game::keyNames[g.accessKey], 2, cyan);
+        text(720, 228, "K CHANGE KEY / PROGRESS SAVED PER KEY", 1.4f, white);
+        if (g.beastlyUnlocked)
+            text(720, 266, g.beastly ? "O BEASTLY ON / DOUBLE SCORE" : "O ENABLE BEASTLY MODE",
+                 1.6f, pink);
+        int page = int(g.time / 12) % 3;
+        if (page == 0) {
+            text(720, 316, "TEMPEST DUDES / HIGH SCORES", 2, lime);
+            for (size_t i = 0; i < g.highScores.size(); ++i) {
+                const auto &entry = g.highScores[i];
+                text(720, 362 + float(i) * 31,
+                     number(int(i) + 1, 2) + "  " + entry.initials + "  " + number(entry.score, 8),
+                     1.9f, i ? white : pink);
+            }
+        } else if (page == 1) {
+            const char *tutorial[] = {"HOW TO PLAY",
+                                      "WHEEL ROTATES AROUND THE RIM",
+                                      "HOLD LMB TO FIRE",
+                                      "RMB SUPERZAPPER / TWO CHARGES",
+                                      "COLLECT LASER THEN JUMP THEN DROID",
+                                      "MMB / SPACE JUMPS AFTER PICKUP",
+                                      "THREE TOKENS OPEN A BONUS",
+                                      "BONUS WHEEL ADDS DRIFT",
+                                      "REVERSE WHEEL TO BRAKE",
+                                      "RINGS: LMB UP / RMB DOWN"};
+            for (int i = 0; i < 10; ++i)
+                text(720, 316 + float(i) * 34, tutorial[i], i ? 1.5f : 2, i ? white : lime);
+        } else {
+            const char *credits[] = {"ORIGINAL TEMPEST 2000 / 1994",
+                                     "GAME DESIGN / JEFF MINTER",
+                                     "ORIGINAL TEMPEST / DAVE THEURER",
+                                     "MUSIC / IMAGITEC DESIGN",
+                                     "VOICES / TED AND CARRIE TAHQUECHI",
+                                     "PRODUCER / JOHN SKRUCH",
+                                     "ATARI CORPORATION",
+                                     "TEMPEST XR / SOURCE RECREATION",
+                                     "DESKTOP / OPENXR / ROTARY INPUT"};
+            for (int i = 0; i < 9; ++i)
+                text(720, 316 + float(i) * 36, credits[i], i ? 1.5f : 2, i ? white : lime);
+        }
     } else {
+        if (g.enteringScore) {
+            text(575, 570, "HIGH SCORE " + g.scoreInitials, 3, lime);
+            text(575 + 11 * 18 + float(g.scoreCursor) * 18, 599, "^", 3, pink);
+            text(350, 643, "WHEEL LETTER / LMB NEXT / RMB BACK / ENTER SAVE", 1.8f, white);
+        }
         rect(48, 775, 1344, 3, {.08f, .16f, .23f, 1});
         rect(48, 775, 1344 * g.progress(), 3, cyan);
         if (g.mode == Mode::Paused || g.mode == Mode::GameOver || g.mode == Mode::Transition ||
             g.mode == Mode::Victory) {
-            if (g.mode != Mode::Transition) {
-                rect(375, 330, 690, 210, {.005f, .012f, .03f, .94f});
-                rect(375, 330, 690, 2, cyan);
-            }
             std::string label = g.mode == Mode::Victory    ? "SUPERSTAR"
                                 : g.mode == Mode::Paused   ? "PAUSED"
                                 : g.mode == Mode::GameOver ? "GAME OVER"
@@ -1272,10 +1407,13 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
                 g.mode == Mode::GameOver && drawRaster("gameover", 580, 348, 280, 131);
             if (!rasterTitle)
                 text(x, 375, label, 6, g.mode == Mode::GameOver ? pink : cyan);
-            std::string sub = g.mode == Mode::Victory    ? "CAMPAIGN COMPLETE / ENTER TO PLAY AGAIN"
-                              : g.mode == Mode::Paused   ? "P / ESC TO RESUME"
-                              : g.mode == Mode::GameOver ? "ENTER TO PLAY AGAIN"
-                                                         : "AVOID SPIKES / JUMP TO CLEAR";
+            std::string sub =
+                g.mode == Mode::Victory    ? (g.beastly ? "BEASTLY COMPLETE / SIX CUPS OF TEA!"
+                                                        : "BEASTLY UNLOCKED / ESC LEVEL SELECT")
+                : g.mode == Mode::Paused   ? "P / ESC TO RESUME"
+                : g.mode == Mode::GameOver ? (g.enteringScore ? "HIGH SCORE / ENTER INITIALS BELOW"
+                                                              : "ENTER TO PLAY AGAIN")
+                                           : "";
             text(720 - float(sub.size()) * 6 * 1.8f / 2, rasterTitle ? 510 : 462, sub, 1.8f, white);
         }
         if (g.isBonus()) {

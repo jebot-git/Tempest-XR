@@ -1,6 +1,7 @@
 #include "audio.hpp"
 #include "domed.hpp"
 #include "game.hpp"
+#include "records.hpp"
 #include "render.hpp"
 #include "xr.hpp"
 #include <SDL.h>
@@ -135,7 +136,8 @@ int main(int argc, char **argv) {
                        "[--no-audio] [--no-music] [--music-dir DIR]\n       [--demo] [--warp-demo] "
                        "[--effects-demo] [--enemy-demo] [--bonus-demo 0..2] [--frames N] "
                        "[--death-demo 0..1] [--capture image.ppm] [--report diagnostics.json] "
-                       "[--smoke-test image.ppm]\n\nWheel: move | LMB: hold to fire | RMB: Superzapper | "
+                       "[--smoke-test image.ppm]\n\nWheel: move | LMB: hold to fire | RMB: "
+                       "Superzapper | "
                        "MMB/Space: jump\nEnter: start/retry | P/Esc: pause | "
                        "V: toggle OpenXR\nB: half-SBS preview | R: recenter XR | F11: "
                        "fullscreen\n[/]: sensitivity | I: invert wheel | M: mute | N: next music "
@@ -206,9 +208,16 @@ int main(int argc, char **argv) {
         if (voiceVolume >= 0)
             settings.voiceVolume = voiceVolume;
         Game game;
-        game.best = settings.best;
+        game.best = std::max(settings.best, game.highScores.front().score);
         game.unlockedLevel = settings.unlockedLevel;
         game.selectedLevel = explicitLevel ? startingLevel : settings.unlockedLevel;
+        game.accessKeys[0].unlocked = settings.unlockedLevel;
+        const auto recordsPath =
+            (std::filesystem::path(path).parent_path() / "records.json").string();
+        if (!frameLimit)
+            loadRecords(recordsPath, game);
+        if (explicitLevel)
+            game.selectedLevel = startingLevel;
         Renderer renderer;
         std::unique_ptr<Audio> audio;
         if (!noAudio) {
@@ -324,7 +333,7 @@ int main(int argc, char **argv) {
         bool quit = false, fullscreen = false;
         bool persist = !frameLimit && !demo && !enemyDemo && !effectsDemo && bonusDemo < 0 &&
                        !warpDemo && !explicitLevel && deathDemo < 0;
-        int savedUnlocked = game.unlockedLevel;
+        int savedUnlocked = game.unlockedLevel, savedRecords = game.recordsVersion;
         Mode lastMode = game.mode;
         auto saveSettings = [&]() {
             if (!persist)
@@ -344,7 +353,10 @@ int main(int argc, char **argv) {
             std::filesystem::rename(temporary, path, error);
             if (error)
                 std::cerr << "Cannot save preferences: " << error.message() << '\n';
+            if (!saveRecords(recordsPath, game))
+                std::cerr << "Cannot save score table and access keys: " << recordsPath << '\n';
             savedUnlocked = game.unlockedLevel;
+            savedRecords = game.recordsVersion;
         };
         int frame = 0, smokeBefore = -1, smokeAfter = -1;
         float keyboardTimer = 0;
@@ -393,6 +405,10 @@ int main(int argc, char **argv) {
                 }
                 if (event.type == SDL_MOUSEBUTTONDOWN) {
                     if (event.button.button == SDL_BUTTON_LEFT) {
+                        if (game.enteringScore) {
+                            game.nextScoreLetter();
+                            continue;
+                        }
                         if (game.mode == Mode::Paused)
                             game.pause();
                         if (game.isBonus()) {
@@ -404,15 +420,20 @@ int main(int argc, char **argv) {
                             game.mode == Mode::GameOver || game.mode == Mode::Victory)
                             game.start(game.mode == Mode::Victory ? 1
                                        : explicitLevel            ? startingLevel
-                                                                  : game.selectedLevel);
+                                                                  : game.selectedLevel,
+                                       true);
                         int w, h;
                         SDL_GetWindowSize(window.get(), &w, &h);
                         float x = float(event.button.x) * 1440 / w,
                               y = float(event.button.y) * 900 / h;
                         if (game.mode == Mode::Menu && x >= 70 && x <= 480 && y >= 662 && y <= 724)
-                            game.start(explicitLevel ? startingLevel : game.selectedLevel);
+                            game.start(explicitLevel ? startingLevel : game.selectedLevel, true);
                     }
                     if (event.button.button == SDL_BUTTON_RIGHT) {
+                        if (game.enteringScore) {
+                            game.scoreCursor = std::max(0, game.scoreCursor - 1);
+                            continue;
+                        }
                         if (game.isBonus()) {
                             game.bonusDown = true;
                             continue;
@@ -432,6 +453,27 @@ int main(int argc, char **argv) {
                 }
                 if (event.type == SDL_KEYDOWN && !event.key.repeat) {
                     auto key = event.key.keysym.sym;
+                    if (game.enteringScore && !(event.key.keysym.mod & (KMOD_CTRL | KMOD_ALT))) {
+                        if (key == SDLK_RETURN || key == SDLK_ESCAPE)
+                            game.finishScoreEntry();
+                        else if (key == SDLK_BACKSPACE || key == SDLK_LEFT)
+                            game.scoreCursor = std::max(0, game.scoreCursor - 1);
+                        else if (key == SDLK_RIGHT)
+                            game.nextScoreLetter();
+                        else if (key == SDLK_UP)
+                            game.steer(1);
+                        else if (key == SDLK_DOWN)
+                            game.steer(-1);
+                        else if (key >= SDLK_a && key <= SDLK_z)
+                            game.setScoreLetter(char('A' + key - SDLK_a));
+                        else if (key >= SDLK_0 && key <= SDLK_9)
+                            game.setScoreLetter(char('0' + key - SDLK_0));
+                        continue;
+                    }
+                    if (key == SDLK_k && game.mode == Mode::Menu)
+                        game.selectAccessKey();
+                    if (key == SDLK_o && game.mode == Mode::Menu && game.beastlyUnlocked)
+                        game.beastly = !game.beastly;
                     if (key == SDLK_q && (event.key.keysym.mod & KMOD_CTRL))
                         quit = true;
                     if (key == SDLK_TAB && (event.key.keysym.mod & KMOD_ALT) && xr) {
@@ -445,7 +487,8 @@ int main(int argc, char **argv) {
                          game.mode == Mode::Victory))
                         game.start(game.mode == Mode::Victory ? 1
                                    : explicitLevel            ? startingLevel
-                                                              : game.selectedLevel);
+                                                              : game.selectedLevel,
+                                   true);
                     if (key == SDLK_ESCAPE) {
                         if (game.mode == Mode::Menu)
                             quit = true;
@@ -507,7 +550,7 @@ int main(int argc, char **argv) {
                     (buttons & SDL_BUTTON_RMASK) || keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
             }
             keyboardTimer -= float(elapsed);
-            if (keyboardTimer <= 0) {
+            if (keyboardTimer <= 0 && !game.enteringScore) {
                 if (keys[SDL_SCANCODE_LEFT] || keys[SDL_SCANCODE_A]) {
                     game.steer(-1);
                     keyboardTimer = .085f;
@@ -565,9 +608,10 @@ int main(int argc, char **argv) {
                     game.tick(1.f / 120);
                 accumulator -= 1. / 120.;
             }
-            if (persist && (game.unlockedLevel > savedUnlocked ||
-                            (game.mode != lastMode &&
-                             (game.mode == Mode::GameOver || game.mode == Mode::Victory))))
+            if (persist &&
+                (game.recordsVersion != savedRecords || game.unlockedLevel > savedUnlocked ||
+                 (game.mode != lastMode &&
+                  (game.mode == Mode::GameOver || game.mode == Mode::Victory))))
                 saveSettings();
             lastMode = game.mode;
             if (audio) {
@@ -636,10 +680,15 @@ int main(int argc, char **argv) {
             if (!wheel || error != GL_NO_ERROR)
                 throw std::runtime_error("Smoke validation failed");
         }
+        game.finishScoreEntry();
         saveSettings();
         if (!reportPath.empty())
             std::ofstream(reportPath)
-                << nlohmann::json{{"managed", dome.managed()},
+                << nlohmann::json{{"score", game.score},
+                                  {"beastly", game.beastly},
+                                  {"access_key", game.accessKey},
+                                  {"player_shots", game.shotSlots(false)},
+                                  {"managed", dome.managed()},
                                   {"launch_xr", launch.xr},
                                   {"xr_entries", xrEntries},
                                   {"xr_suspends", xrSuspends},

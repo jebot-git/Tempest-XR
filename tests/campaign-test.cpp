@@ -81,10 +81,10 @@ int main() {
         g.score = 19500;
         g.enemiesRemaining = 0;
         g.tick(.01f);
-        CHECK(g.score == 20500);
-        CHECK(g.lives == 4);
+        CHECK(g.score == 19500);
+        CHECK(g.lives == 3);
         g.addScore(40000);
-        CHECK(g.lives == 6); // Every crossed threshold awards a life.
+        CHECK(g.lives == 5); // Every crossed threshold awards a life.
         g.start();
         g.invulnerable = 0;
         g.enemiesRemaining = 0;
@@ -246,14 +246,16 @@ int main() {
         g.spawn(Kind::Flipper, 0, .7f);
         g.spawn(Kind::Fuseball, 1, .7f);
         g.spawn(Kind::Mirror, 2, .7f);
+        g.enemies[1].fuseMotion = FuseMotion::Crossing;
+        g.enemies[1].crossSteps = 8;
         g.zap();
         CHECK(g.zaps == 1);
-        g.tick(.01f);
+        step(g, .15f);
         CHECK(g.enemies.size() == 1 && count(g, Kind::Mirror) == 1);
         g.spawn(Kind::Flipper, 0, .7f);
         g.spawn(Kind::Flipper, 1, .6f);
         g.zap();
-        g.tick(.01f);
+        step(g, .075f);
         CHECK(count(g, Kind::Flipper) == 1);
         CHECK(g.zaps == 0);
         // Pickup order: laser, points, jump, points, friendly droid, token.
@@ -353,7 +355,7 @@ int main() {
                 CHECK(g.bonusFinished);
                 CHECK(g.bonusWon);
                 CHECK(g.bonusHits == (type == 1 ? g.tunnelSteps : g.bonusGateCount()));
-                step(g, type == 1 ? 5.1f : 2.1f);
+                step(g, type == 1 ? 5.1f : 6.8f);
                 CHECK(g.mode == Mode::BonusReturn);
                 CHECK(g.level == startingLevel + 5);
                 g.pause();
@@ -404,7 +406,11 @@ int main() {
                 g.sounds.clear();
             }
             CHECK(g.enemiesRemaining == 0);
-            CHECK(g.mode == (level == 100 ? Mode::Victory : Mode::Transition));
+            CHECK(g.mode == Mode::Transition);
+            if (level >= 99) {
+                step(g, 2.5f);
+                CHECK(g.mode == Mode::Victory && g.beastlyUnlocked);
+            }
             CHECK(g.unlockedLevel == 100 || g.unlockedLevel >= level);
         }
         for (int type = 0; type < 12; type++)

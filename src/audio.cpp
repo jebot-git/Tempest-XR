@@ -124,6 +124,8 @@ static int effectSample(Sound sound) {
         return 17;
     case Sound::MirrorReflect:
         return 19;
+    case Sound::AlienBonus:
+        return 8;
     }
     return -1;
 }
@@ -157,6 +159,7 @@ void Audio::play(Sound sound) {
         priority = 51;
         break;
     case Sound::Pickup:
+    case Sound::AlienBonus:
     case Sound::TankerOpen:
     case Sound::MirrorReflect:
         priority = 3;

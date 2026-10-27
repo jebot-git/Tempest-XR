@@ -7,9 +7,17 @@ The installed build was smoke-tested from `/tmp` with the new tunnel. It loaded
 all 30 original effect samples and selected `tune3.mod`. All 45 installed
 music/effect/art files match the tested repository assets by SHA256.
 
-The default OpenXR build passes all eleven CTest suites. The build configured
-with `TEMPEST_OPENXR=OFF` passes its ten applicable suites:
+The default OpenXR build passes all thirteen CTest suites. The build configured
+with `TEMPEST_OPENXR=OFF` passes its twelve applicable suites:
 
+- Source gap regressions: collision-time beast/droid shields; shared paced zap
+  eligibility including fuse/beast immunity; exact launch ticks and 150-frame
+  pixel entry; safe pulsar activation; allocation/shot ownership and eleven-frame
+  shot remnants; open-web endpoints; every tunnel phase pair; retained clearance
+  animation; rare exits, selected-web/Beastly scoring, pickup rez, fireworks and
+  separate One Up graphic/holiday durations.
+- Score table/access keys: source defaults, rotary initials entry, ending and
+  Beastly unlock, per-key progress, atomic JSON round trips and invalid-file handling.
 - Gameplay, steering, transitions and ship-follow camera.
 - Timed rim combat: source angular windows (including concave-web wrap), early
   and departed-shot misses, capture lanes, pause/jump, rotation/pause tuning,
@@ -25,12 +33,15 @@ with `TEMPEST_OPENXR=OFF` passes its ten applicable suites:
   off-track tolerance/recovery, continuous scores, inertia, braking and pause.
 - Audit regressions, all enemy families and 100 wave generation budgets,
   powerups, both zaps, bonus courses, death/respawn and campaign victory.
-- Original tracker decoding, module selection and pause behavior.
+- Original tracker decoding, module selection, outgoing 51-frame fade boundary
+  and frozen transition during pause.
 - Sample decoding, verified Imagitec positive pitch, original loop regions,
   two/six channel limits, sample-only voices with SFX muted, detuned pairs,
   priority stealing, music context changes/retry, and frozen playback while paused.
 - OpenGL sky coverage, original raster/font assets, mesh animation, HUD states,
   bonus scenes, actual rim turns on circular/flat/concave webs, death effects and frame feedback.
+  Pixel reads confirm that Menu/Pause/Game Over/clearance/victory title-card
+  corners preserve the underlying scene.
 - Original module/sample/art hashes and alpha-masked CRY conversion.
 - Injected OpenXR runtime failure: play pauses and capture, relative mouse mode
   and XR intent are released before the process exits.
@@ -132,3 +143,35 @@ wave-four warp capture with `gl_error=0`. Before/after 90-frame captures were
 compared: the header and footer are byte-identical, while the former panel
 region exposes the tunnel lines behind the unchanged lettering. The dark
 background and its border no longer draw during the clearance flight.
+
+## Gap-fill verification
+
+ASan/UBSan with leak detection passed eight gameplay suites: gap, records,
+gameplay (including 180-second stress), rim combat, source behavior, enemy AI,
+tunnel and campaign. The subsequent capacity/entry/ending changes were rechecked
+under sanitizers in gap, gameplay, campaign and records. Final One Up presentation/timer and fractional initials-input changes are
+also covered by CTest.
+
+`tools/test_frontend.py` is an opt-in private Xvfb/Xlib interaction test:
+
+```sh
+uv run --no-project --with python-xlib python tools/test_frontend.py
+```
+
+It launches the native desktop application four times against temporary data,
+checks old five/six/nine-field preferences with legacy autofire enabled, verifies
+that F cannot enable unattended shots, changes all four access keys, starts the
+selected web through Enter, checks its reward, saves while paused, and reloads
+an unlocked Beastly profile and high-score table. All four runs pass; the user's
+preferences and desktop/runtime are not used. Output is in
+`artifacts/frontend-test/`.
+
+The private simulated Monado run passes seven scenarios: 400 frames/399 stereo,
+144 warp frames reaching 13.9995 m, 102 jump frames; enemies, rings, tunnel,
+psychedelic, explosion and capture each produce 90 frames/89 stereo. This uses
+native EGL and the null compositor; it does not validate physical tracking.
+
+The dark desktop score/help strips have also been removed. Desktop captures in
+`artifacts/gaps-menu.ppm` and `artifacts/gaps-warp.ppm` show transparent title/text
+overlays and the original source-only warning in the tunnel. Installed smoke
+runs use frame limits, so they do not write user settings or records.

@@ -34,6 +34,20 @@ int main(int argc, char **argv) {
                 throw std::runtime_error(std::string("Silent or mono decode: ") + file);
             std::cout << file << " stereo_rms=" << std::sqrt(energy / samples.size()) << '\n';
         }
+        if (!music.load((std::filesystem::path(argv[1]) / "tune13.mod").string()) ||
+            !music.transitioning())
+            throw std::runtime_error("Track switch did not queue an outgoing fade");
+        music.pause(true);
+        music.render(samples.data(), 40800);
+        if (!music.transitioning())
+            throw std::runtime_error("Paused music advanced its fade");
+        music.pause(false);
+        music.render(samples.data(), 40799);
+        if (!music.transitioning())
+            throw std::runtime_error("Music switched before the source's 51-frame delay");
+        music.render(samples.data(), 1);
+        if (music.transitioning())
+            throw std::runtime_error("Music failed to switch at the fade boundary");
         music.pause(true);
         music.render(samples.data(), samples.size() / 2);
         for (float sample : samples)

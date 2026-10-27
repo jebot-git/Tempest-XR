@@ -192,6 +192,22 @@ int main() {
                     render(0, 0);
             }
         }
+        // Title overlays must preserve the underlying scene at the former card corners.
+        for (Mode mode :
+             {Mode::Menu, Mode::Paused, Mode::GameOver, Mode::Transition, Mode::Victory}) {
+            game.mode = mode;
+            glClearColor(.25f, .375f, .5f, 1);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            renderer.hud(game, 512, 512, "", 1, false, false);
+            std::array<unsigned char, 3> color{};
+            int x = mode == Mode::Menu ? 35 : 380;
+            int y = mode == Mode::Menu ? 180 : 340;
+            glReadPixels(x * 512 / 1440, 511 - y * 512 / 900, 1, 1, GL_RGB, GL_UNSIGNED_BYTE,
+                         color.data());
+            if (std::abs(int(color[0]) - 64) > 1 || std::abs(int(color[1]) - 96) > 1 ||
+                std::abs(int(color[2]) - 128) > 1)
+                throw std::runtime_error("Opaque background remains behind a title");
+        }
         renderer.releaseGL();
         SDL_GL_DeleteContext(context);
         SDL_DestroyWindow(window);

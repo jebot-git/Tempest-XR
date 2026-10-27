@@ -34,6 +34,7 @@ class Renderer {
     void bonusWorld(const Game &g);
     void tunnelWorld(const Game &g);
     void headsetHud(const Game &g);
+    void effectsWorld(const Game &g);
     void deathWorld(const Game &g);
     bool mesh(std::string_view name, Vec3 center, Vec3 tangent, Vec3 normal, float scale,
               Color tint, float angle = 0, float fold = 1);

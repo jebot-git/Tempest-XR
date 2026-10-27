@@ -48,8 +48,8 @@ int main() {
         steps(g, 1);
         CHECK(g.tunnelTrail == 4 && g.score == 4);
         constexpr float tau = 6.283185307f;
-        for (auto entry : {std::pair{32.25f, true}, std::pair{33.25f, false},
-                           std::pair{-32.25f, true}, std::pair{-33.25f, false}}) {
+        for (auto entry : {std::pair{32.25f, true}, std::pair{33.25f, true},
+                           std::pair{-32.25f, false}, std::pair{-33.25f, false}}) {
             g.start();
             g.startBonus(1);
             g.bonusAngle = entry.first * tau / 256;

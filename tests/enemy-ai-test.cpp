@@ -109,7 +109,7 @@ int main() {
             step(g, 2);
             CHECK(enemy(g, Kind::Spiker).lane != rail);
             g.zap();
-            step(g, 1);
+            step(g, 8);
             CHECK(count(g, Kind::Spiker) == 0 && g.hasSpike(rail));
         }
         {
@@ -326,9 +326,9 @@ int main() {
             g.spawn(Kind::Adroid, 5, .5f);
             g.spawn(Kind::Beast, 6, .5f);
             g.zap();
-            step(g, 1);
+            step(g, 8);
             CHECK(count(g, Kind::Mirror) == 1 && count(g, Kind::MirrorShot) == 1 &&
-                  count(g, Kind::Adroid) == 1 && count(g, Kind::Beast) == 0);
+                  count(g, Kind::Adroid) == 1 && count(g, Kind::Beast) == 1);
         }
         {
             auto g = setup();
@@ -338,8 +338,8 @@ int main() {
             step(g, 1);
             CHECK(g.shots.empty()); // Reflections still occupy their original shot entitlement.
             g.droidActive = true;
-            step(g, 1);
-            CHECK(g.shots.size() == 1);
+            step(g, 12);
+            CHECK(g.shots.size() == 1 && g.shots[0].ally);
         }
         {
             auto g = setup(100);

@@ -62,7 +62,8 @@ enum class Sound {
     BonusToken,
     FlipperLand,
     TankerOpen,
-    MirrorReflect
+    MirrorReflect,
+    AlienBonus
 };
 enum class SpikerMotion { Seeking, Climbing, Descending };
 enum class FuseMotion { Climbing, Crossing };
@@ -74,7 +75,9 @@ struct Enemy {
     float depth = 1, age = 0;
     int direction = 1;
     bool rim = false, dead = false;
-    bool emerging = false;
+    bool emerging = false, entering = false, ally = false;
+    int pickupFrames = 0;
+    int rail = -1;
     int hp = 1;
     float sparkTime = 5.f / 60;
     FlipperMotion motion = FlipperMotion::Climbing;
@@ -93,6 +96,13 @@ struct Shot {
     int lane;
     float depth = 0, previous = 0;
     bool dead = false;
+    bool ally = false, takenOver = false;
+};
+enum class EffectKind { Rings, Sphere, Splatter, Firework, Pickup, Score };
+struct Effect {
+    EffectKind kind;
+    Vec3 pos, velocity{};
+    int frame = 0, duration = 50, color = 0, density = 1;
     bool ally = false;
 };
 struct Particle {
@@ -117,9 +127,18 @@ struct TunnelSegment {
     int track = 0;
     std::array<TunnelBand, 2> bands{};
 };
+struct ScoreEntry {
+    std::string initials;
+    int score = 0, level = 1;
+    bool beastly = false;
+};
+struct AccessKey {
+    int unlocked = 1;
+    bool beastly = false;
+};
 class Game {
     std::mt19937 random;
-    float fireTimer = 0, transitionTimer = 0, wheelRemainder = 0, droidTimer = 0;
+    float fireTimer = 0, transitionTimer = 0, wheelRemainder = 0;
     int kills = 0, nextLife = 20000;
     Mode pausedFrom = Mode::Playing;
     Vec3 nextSpawn;
@@ -129,7 +148,23 @@ class Game {
     Vec3 returnOffset;
     float returnTime = 0, rechargeDelay = 0;
     int pendingBonus = -1, bonusBaseLevel = 1;
-    std::vector<float> spawnTimers;
+    std::vector<int> spawnTimers;
+    double generationClock = 0, zapClock = 0, droidClock = 0;
+    int zapFrames = 0, droidSteps = 0, droidFrom = 0, droidTo = 0, droidFireFrames = 5;
+    bool zapActive = false, zapSingle = false, infiniteZap = false;
+    double effectClock = 0;
+    int fireworkWait = 1, fireworkDuration = 80, fireworkColor = 0;
+    size_t fireworkPC = 0;
+    Vec3 fireworkPosition{}, fireworkVelocity{};
+    std::vector<std::pair<size_t, int>> fireworkStack;
+    void tickEffects(float dt);
+    void tickFireworks();
+    void surprisePowerup();
+    void offerHighScore();
+    void startZap(bool single = false, bool infinite = false);
+    void tickZap(float dt);
+    void tickDroid(float dt);
+    void animateClearance(float dt);
     std::vector<Enemy> pending;
     int killsToPowerup = 1, bonusCourse = 0;
     std::array<int, 3> bonusRuns{};
@@ -157,6 +192,7 @@ class Game {
     void collectPowerup();
     void beginTransition(int destination);
     void completeWave();
+    void finishCampaign();
     void tickBonus(float dt);
     void tickPickups(float dt);
     void returnFromBonus();
@@ -173,6 +209,27 @@ class Game {
 
   public:
     Mode mode = Mode::Menu;
+    std::array<ScoreEntry, 10> highScores{{{"YAK", 500017},
+                                           {"EWE", 400000},
+                                           {"COW", 300000},
+                                           {"GNU", 200000},
+                                           {"OX ", 100000},
+                                           {"ELK", 90000},
+                                           {"DOE", 80000},
+                                           {"MOO", 70000},
+                                           {"BAA", 60000},
+                                           {"FUR", 50000}}};
+    std::array<AccessKey, 4> accessKeys{};
+    inline static constexpr const char *keyNames[] = {"YAK", "COW", "ZOO", "AXE"};
+    int accessKey = 0, recordsVersion = 0;
+    bool enteringScore = false;
+    std::string scoreInitials = "AAA";
+    int scoreCursor = 0;
+    void finishScoreEntry();
+    void nextScoreLetter();
+    void setScoreLetter(char letter);
+    void storeAccessKey();
+    void selectAccessKey();
     Web web;
     int level = 1, score = 0, best = 0, lives = 3, lane = 0, zaps = 2;
     int targetLevel = 2, enemiesRemaining = 0, waveSize = 0, unlockedLevel = 1, selectedLevel = 1;
@@ -201,6 +258,14 @@ class Game {
         return std::clamp(float(tunnelClock * 60), 0.f, 1.f);
     }
     float deathTime = 0, oneUpTime = 0;
+    bool beastly = false, beastlyUnlocked = false, earlyExit = false;
+    bool clearanceWarning() const {
+        return level >= 4 && level <= 16 && !earlyExit;
+    }
+    size_t shotSlots(bool ally) const;
+    int objectSlots() const;
+    int physicalSlots() const;
+    bool canGenerate() const;
     bool snatched = false;
     static constexpr float deathDuration = 1.6f;
     float deathProgress() const {
@@ -223,12 +288,13 @@ class Game {
     }
     int pulsePhase() const;
     float shotSpeed() const {
-        return (boost ? 4.5f : 3.5f) * 60 / 160;
+        return (boost ? 4.5f : 3.5f) * 60 / 160 * (beastly ? .5f : 1.f);
     }
+    std::vector<Effect> effects;
     std::vector<Particle> particles;
     std::vector<Sound> sounds;
     explicit Game(uint32_t seed = 2000);
-    void start(int startingLevel = 1);
+    void start(int startingLevel = 1, bool awardStart = false);
     void steer(float notches);
     int boundedLane(int n) const;
     void jump();
@@ -239,7 +305,7 @@ class Game {
     Vec3 position(float lanePosition, float depth) const;
     void burst(Vec3 p, int color, int count = 25);
     void addScore(int points);
-    void spawn(Kind kind, int spawnLane = -1, float depth = 1);
+    void spawn(Kind kind, int spawnLane = -1, float depth = 1, bool entering = false);
     static Kind kindForSource(int type);
     static bool hostile(Kind kind);
     static bool flipperKind(Kind kind);
