@@ -300,11 +300,7 @@ Kind Game::kindForSource(int type) {
 }
 static Enemy makeEnemy(Kind kind, int lane, float depth, int direction) {
     Enemy e{kind, lane, depth, 0, 0, direction};
-    e.hp = kind == Kind::Mirror          ? 5
-           : kind == Kind::SuperFlipper2 ? 3
-           : kind == Kind::SuperFlipper  ? 2
-           : kind == Kind::Beast         ? 3
-                                         : 1;
+    e.hp = kind == Kind::Mirror ? 5 : kind == Kind::Beast ? 3 : 1;
     e.firing = 1.5f;
     return e;
 }
@@ -338,12 +334,6 @@ void Game::destroy(Enemy &e, bool zap) {
     case Kind::Pulsar:
     case Kind::PulsarSpark:
         points = 200;
-        break;
-    case Kind::SuperFlipper:
-        points = 250;
-        break;
-    case Kind::SuperFlipper2:
-        points = 750;
         break;
     case Kind::Mirror:
     case Kind::Adroid:
@@ -1044,8 +1034,7 @@ void Game::tick(float dt) {
                 children.push_back(
                     makeEnemy(contents, boundedLane(e.lane + d), std::max(.16f, e.depth), d));
             destroy(e);
-        } else if (e.kind == Kind::Mirror || e.kind == Kind::SuperFlipper ||
-                   e.kind == Kind::SuperFlipper2) {
+        } else if (e.kind == Kind::Mirror) {
             e.hp -= powered ? 2 : 1;
             if (!powered)
                 children.push_back(makeEnemy(Kind::EnemyShot, e.lane, e.depth, 1));

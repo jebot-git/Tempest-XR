@@ -193,9 +193,9 @@ int main() {
             g.spawn(kind, 0, .6f);
             g.shots = {{0, .59f, .58f}};
             g.tick(.01f);
-            CHECK(count(g, kind) == 1);
-            CHECK(count(g, Kind::EnemyShot) == 1);
-            CHECK(g.enemies[0].hp >= 1);
+            CHECK(count(g, kind) == (kind == Kind::Mirror ? 1 : 0));
+            CHECK(count(g, Kind::EnemyShot) == (kind == Kind::Mirror ? 1 : 0));
+            CHECK(g.score == (kind == Kind::Mirror ? 0 : 150));
         }
         g.start();
         g.autoFire = false;

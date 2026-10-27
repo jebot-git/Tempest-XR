@@ -422,7 +422,7 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
             mesh("spuls4", p + Vec3{0, 0, .005f}, tangent, normal, s * .55f, amber);
         if (e.kind == Kind::FuseTanker)
             mesh("fbpiece1", p + Vec3{0, 0, .005f}, tangent, normal, s * .6f, amber, g.time * 3);
-        if (e.kind == Kind::Mirror || e.kind == Kind::SuperFlipper || e.kind == Kind::SuperFlipper2)
+        if (e.kind == Kind::Mirror)
             for (int i = 0; i < e.hp; i++)
                 line(point(-.6f + float(i) * .4f, -1.6f), point(-.6f + float(i) * .4f, -1.9f),
                      white);
@@ -483,8 +483,6 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
         if (e.kind != Kind::Flipper) {
             line(point(-1.6f, 0), point(0, 1.4f), white);
             line(point(0, 1.4f), point(1.6f, 0), white);
-            for (int i = 0; i < e.hp; i++)
-                line(point(-.6f + float(i) * .6f, -1), point(-.6f + float(i) * .6f, -1.3f), c);
         }
     } else if (e.kind == Kind::Spiker) {
         for (int i = 0; i < 4; i++) {

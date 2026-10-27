@@ -230,3 +230,8 @@ present and are not counted as missing implementations.
    artificial 24-second expiry was removed. `original-behavior-regressions`
    covers live rim enemies, down-web blockers, pickups and non-expiring enemies.
    Earlier reproduced gaps above describe the evaluated revision, not this fix.
+
+2. **Super-flipper damage implemented.** Both variants die on one valid normal,
+   friendly or laser hit and award the source flipper score. Invented armor,
+   reflected bullets and health pips were removed. Mirror/beast rules remain
+   separate. Campaign assertions now check the corrected behavior.

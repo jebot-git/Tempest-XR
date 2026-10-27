@@ -57,7 +57,20 @@ int main() {
             CHECK(std::any_of(g.enemies.begin(), g.enemies.end(),
                               [](auto &e) { return e.kind == Kind::Flipper && e.age > 24; }));
         }
-        std::cout << "Source wave-clear condition and retained rim enemies passed\n";
+        for (auto kind : {Kind::SuperFlipper, Kind::SuperFlipper2})
+            for (int weapon = 0; weapon < 3; ++weapon) {
+                auto g = setup();
+                g.boost = weapon == 1;
+                g.spawn(kind, g.lane, .5f);
+                Shot shot{g.lane, .49f, .49f};
+                shot.ally = weapon == 2;
+                g.shots = {shot};
+                g.tick(dt);
+                CHECK(count(g, kind) == 0 && count(g, Kind::EnemyShot) == 0 && g.score == 150);
+                CHECK(g.shots.size() == (weapon == 1 ? 1u : 0u));
+            }
+        std::cout
+            << "Source wave clearance, retained enemies and single-hit super flippers passed\n";
         return 0;
     } catch (const std::exception &e) {
         std::cerr << e.what() << '\n';
