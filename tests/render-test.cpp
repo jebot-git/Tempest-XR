@@ -61,6 +61,12 @@ int main() {
         expectHud("HOLD LMB / UP / W: UP");
         expectHud("MISSING ENDS BONUS");
         expectHud("PAUSED / CLICK OR ENTER TO RESUME");
+        status.startBonus(1);
+        expectHud("TURNS 0/64");
+        expectHud("TRAIL 3.0/31.5");
+        expectHud("STAY ON THE GREEN TRACK");
+        expectHud("OFF TRACK SHRINKS IT");
+        expectHud("MISSING ONE", false);
         status.mode = Mode::Victory;
         expectHud("CAMPAIGN COMPLETE");
         expectHud("PLAY AGAIN");

@@ -96,6 +96,13 @@ struct Web {
         return int(points.size()) - (closed ? 0 : 1);
     }
 };
+struct TunnelBand {
+    int phase = 0, pixels = 32, color = 255;
+};
+struct TunnelSegment {
+    int track = 0;
+    std::array<TunnelBand, 2> bands{};
+};
 class Game {
     std::mt19937 random;
     float fireTimer = 0, transitionTimer = 0, wheelRemainder = 0, droidTimer = 0;
@@ -114,6 +121,17 @@ class Game {
     std::array<int, 3> bonusRuns{};
     float bonusCheckTime = 0, bonusResultTime = 0;
     bool lastPulse = false;
+    struct TunnelPattern {
+        int x, vx, y, vy;
+        uint16_t phase, phaseStep, density, densityStep;
+    };
+    std::array<TunnelPattern, 2> tunnelPatterns{{{128, 22, 64, 28, 0x2000, 0x100, 0x800, 0x60},
+                                                 {80, 9, 112, 15, 0x6000, 0x280, 0xc00, 0xc0}}};
+    int tunnelPatternCountdown = 300, tunnelBend = 0;
+    uint16_t tunnelPhase = 0;
+    double tunnelClock = 0;
+    void startTunnel();
+    void tickTunnel(float dt);
     float randf(float lo, float hi);
     void loadWeb();
     void hit(bool snatch = false);
@@ -147,6 +165,16 @@ class Game {
     float droidLane = 0, bonusTime = 0, bonusX = 0, bonusY = 0, bonusAngle = 0;
     float bonusDistance = 0, bonusSpeed = 30, bonusImpulse = 0, bonusEffectTime = 0;
     int bonusBoosts = 0, bonusLastScore = 0;
+    std::array<TunnelSegment, 64> tunnel{};
+    std::vector<float> tunnelTrailAngles;
+    int tunnelHead = 0, tunnelSteps = 0;
+    float tunnelTrail = 3, tunnelVelocity = 0, tunnelResultTime = 0;
+    static constexpr float tunnelWheelGain = .8f;
+    float tunnelTrackAngle(int ahead = 0) const;
+    bool tunnelOnTrack() const;
+    float tunnelInterpolation() const {
+        return std::clamp(float(tunnelClock * 60), 0.f, 1.f);
+    }
     float deathTime = 0, oneUpTime = 0;
     bool snatched = false;
     static constexpr float deathDuration = 1.6f;

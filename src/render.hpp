@@ -32,6 +32,7 @@ class Renderer {
     void grid(const Game &g, Vec3 offset = {}, float alpha = 1);
     void particleMessage(const Game &g, bool headset);
     void bonusWorld(const Game &g);
+    void tunnelWorld(const Game &g);
     void headsetHud(const Game &g);
     void deathWorld(const Game &g);
     bool mesh(std::string_view name, Vec3 center, Vec3 tangent, Vec3 normal, float scale,

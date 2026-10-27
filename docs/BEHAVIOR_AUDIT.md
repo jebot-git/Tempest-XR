@@ -248,3 +248,18 @@ present and are not counted as missing implementations.
    lane during emergence. The original paired sample-17 pitch-60/61 cue replaces
    the generic explosion. Tests cover early non-opening, rim release and
    mid-web child turns. Fuseball crossing refinements are part of step six.
+
+5. **Original tunnel rules implemented.** A 64-segment circular buffer and the
+   source pattern generators feed the green track. Rotary inertia, quantized
+   track contact, trail growth/loss, continuous tiered scoring and delayed
+   collapse replace radial gates and instant failure. All eight courses finish
+   through public steering controls in 1,024 source frames for 29,662 points.
+   There is no invented 20,000-point tunnel completion award. Desktop and XR
+   explain rotation speed, braking and trail recovery. Renderer checks and
+   `original-tunnel` cover these rules, failure, recovery, pause and boundaries.
+   Geometry, RGB wall colors and mouse gain remain modern adaptations.
+
+   **Correction to the earlier speed finding:** `tundraw` loads `pongyv` into
+   d6, but `inst` clears d6 before the final `dbra d6,inst`. The preserved active
+   code therefore emits one segment per frame; its unused ramp variables do not
+   accelerate the tunnel. The translation follows that executable path.

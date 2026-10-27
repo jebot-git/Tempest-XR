@@ -648,7 +648,71 @@ void Renderer::particleMessage(const Game &g, bool headset) {
     glEnd();
     glPopAttrib();
 }
+void Renderer::tunnelWorld(const Game &g) {
+    constexpr float tau = 6.283185307f;
+    float collapse =
+        g.bonusFinished && !g.bonusWon ? std::max(0.f, 1 - g.tunnelResultTime / (33.f / 60)) : 1;
+    auto point = [&](float angle, float ring) {
+        return Vec3{std::cos(angle) * 1.4f * collapse, std::sin(angle) * 1.4f * collapse,
+                    -3.8f - ring * .42f};
+    };
+    auto track = [&](int ring) {
+        float a = g.tunnelTrackAngle(ring), b = g.tunnelTrackAngle(std::min(55, ring + 1));
+        return a + std::remainder(b - a, tau) * g.tunnelInterpolation();
+    };
+    for (int ring = 0; ring < 55; ++ring) {
+        float a = track(ring), b = track(ring + 1);
+        glColor4f(.12f, .8f, .08f, .12f * collapse);
+        glBegin(GL_QUAD_STRIP);
+        for (int i = 0; i <= 16; ++i) {
+            float offset = -tau / 8 + float(i) * tau / 64;
+            for (auto p : {point(a + offset, float(ring)), point(b + offset, float(ring + 1))})
+                glVertex3f(p.x, p.y, p.z);
+        }
+        glEnd();
+        Color green = ring == 0 && g.tunnelOnTrack() ? white : lime;
+        green.a = (1 - float(ring) / 70) * collapse;
+        for (float edge : {-tau / 8, tau / 8})
+            line(point(a + edge, float(ring)), point(b + edge, float(ring + 1)), green);
+        for (int i = 0; i < 16; ++i)
+            line(point(a - tau / 8 + float(i) * tau / 64, float(ring)),
+                 point(a - tau / 8 + float(i + 1) * tau / 64, float(ring)), green);
+        const auto &seg = g.tunnel[size_t((g.tunnelHead + 8 + ring) & 63)];
+        for (const auto &band : seg.bands) {
+            Color c = spectrum(float(band.color) / 256, .65f * collapse * (1 - float(ring) / 70));
+            for (int pixel = 0; pixel < band.pixels; ++pixel) {
+                float angle = (float(band.phase) / 256 + float(pixel) / band.pixels) * tau;
+                line(point(angle, float(ring)), point(angle + .015f, float(ring)), c);
+            }
+        }
+    }
+    int length = std::min(int(g.tunnelTrailAngles.size()), int(g.tunnelTrail) + 1);
+    Vec3 previous{};
+    for (int i = 0; i < length; ++i) {
+        float angle = g.tunnelTrailAngles[size_t(i)];
+        Vec3 p{std::cos(angle) * 1.4f, std::sin(angle) * 1.4f, -3.8f + float(i) * 9 / 160};
+        Color c = spectrum(float(i) * .04f + g.time * .1f, collapse);
+        float r = (i == 0 ? .09f : .045f) * collapse;
+        Vec3 vertices[] = {p + Vec3{0, r, 0}, p + Vec3{r, 0, 0}, p + Vec3{0, -r, 0},
+                           p + Vec3{-r, 0, 0}};
+        for (int k = 0; k < 4; ++k) {
+            line(vertices[k], vertices[(k + 1) % 4], c);
+            line(vertices[k], p + Vec3{0, 0, r}, c);
+            line(vertices[k], p + Vec3{0, 0, -r}, c);
+        }
+        if (i)
+            line(previous, p, lime);
+        previous = p;
+    }
+    Vec3 cursor = g.bonusCursor() + Vec3{0, 0, -3.8f};
+    line(cursor + Vec3{-.12f, 0, 0}, cursor + Vec3{.12f, 0, 0}, white);
+    line(cursor + Vec3{0, -.12f, 0}, cursor + Vec3{0, .12f, 0}, white);
+}
 void Renderer::bonusWorld(const Game &g) {
+    if (g.bonusType == 1) {
+        tunnelWorld(g);
+        return;
+    }
     if (g.bonusType != 1) {
         const auto *ground = rasterAtlas("pic4");
         glPushAttrib(GL_ENABLE_BIT | GL_TEXTURE_BIT | GL_CURRENT_BIT);
@@ -1007,12 +1071,16 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
             result.push_back(std::string(g.bonusType == 1   ? "TUNNEL"
                                          : g.bonusType == 2 ? "PSYCHEDELIC"
                                                             : "RING") +
-                             " BONUS / GATES " + number(g.bonusHits) + "/" +
+                             " BONUS / " + (g.bonusType == 1 ? "TURNS " : "GATES ") +
+                             number(g.bonusType == 1 ? g.bonusGate : g.bonusHits) + "/" +
                              number(g.bonusGateCount()));
             char speed[80];
             std::snprintf(speed, sizeof(speed), "SPEED %.2fX / BOOSTS %d / LAST +%d",
                           g.bonusSpeed / (g.bonusType == 2 ? 37.5f : 30.f), g.bonusBoosts,
                           g.bonusLastScore);
+            if (g.bonusType == 1)
+                std::snprintf(speed, sizeof(speed), "TRAIL %.1f/31.5 / SCORE +%d / SPEED 60 SEG/S",
+                              g.tunnelTrail, g.bonusLastScore);
             result.push_back(speed);
         }
         if (g.mode == Mode::Paused)
@@ -1020,7 +1088,7 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
         else if (g.isBonusReturn())
             result.push_back("RETURNING TO WEB");
         else if (g.isBonus())
-            result.push_back(g.bonusType == 1 ? "WHEEL / LEFT / RIGHT TO ROTATE"
+            result.push_back(g.bonusType == 1 ? "WHEEL ADJUSTS SPEED / REVERSE TO BRAKE"
                                               : "WHEEL X / HOLD LMB UP / RMB DOWN");
         else if (g.deathTime > 0)
             result.push_back(g.snatched ? "SHIP CAPTURED / RETURNING TO WEB"
@@ -1039,11 +1107,13 @@ std::vector<std::string> Renderer::xrHudLines(const Game &g) {
 std::vector<std::string> Renderer::bonusInstructions(const Game &g) {
     if (!g.isBonus() || g.bonusFinished)
         return {};
-    if (g.bonusType == 1 && g.bonusGate > 0 && g.mode != Mode::Paused)
-        return {"WHEEL / LEFT / RIGHT / A / D: ROTATE"};
+    if (g.bonusType == 1 && g.bonusTime > 4 && g.mode != Mode::Paused)
+        return {"STAY ON GREEN / REVERSE WHEEL TO BRAKE"};
     if (g.bonusType == 1)
-        return {"ROTATE CROSSHAIR THROUGH EVERY OPENING", "WHEEL OR LEFT / RIGHT / A / D",
-                "MISSING ONE ENDS BONUS / COMPLETE TO WARP"};
+        return {"STAY ON THE GREEN TRACK", "WHEEL / LEFT / RIGHT / A / D: ADJUST ROTATION SPEED",
+                "REVERSE TO BRAKE / MOTION HAS INERTIA",
+                "ON TRACK GROWS TRAIL / OFF TRACK SHRINKS IT",
+                "RECOVER BEFORE TRAIL RUNS OUT / COMPLETE TO WARP"};
     if (g.bonusGate > 0 && g.mode != Mode::Paused)
         return {"LMB / UP / W: UP    RMB / DOWN / S: DOWN"};
     return {"AIM CROSSHAIR THROUGH EACH RING / MISSING ENDS BONUS",
@@ -1113,7 +1183,7 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
     rect(48, 802, 1344, 1, {.2f, .5f, .65f, .3f});
     if (g.isBonus()) {
         text(48, 829,
-             g.bonusType == 1 ? "WHEEL / LEFT / RIGHT: ROTATE THROUGH OPENINGS"
+             g.bonusType == 1 ? "WHEEL / LEFT / RIGHT: ROTATION SPEED / REVERSE TO BRAKE"
                               : "WHEEL: X   HOLD LMB / UP / W: UP   RMB / DOWN / S: DOWN",
              1.6f, cyan);
     } else {
@@ -1178,12 +1248,19 @@ void Renderer::hud(const Game &g, int width, int height, const std::string &stat
             text(720 - float(sub.size()) * 6 * 1.8f / 2, rasterTitle ? 510 : 462, sub, 1.8f, white);
         }
         if (g.isBonus()) {
-            text(48, 751, "GATES " + number(g.bonusHits) + "/" + number(g.bonusGateCount()), 1.5f,
-                 cyan);
+            text(48, 751,
+                 (g.bonusType == 1 ? "TURNS " : "GATES ") +
+                     number(g.bonusType == 1 ? g.bonusGate : g.bonusHits) + "/" +
+                     number(g.bonusGateCount()),
+                 1.5f, cyan);
             char bonusStatus[96];
             std::snprintf(bonusStatus, sizeof(bonusStatus), "SPEED %.2fX / BOOSTS %d / LAST +%d",
                           g.bonusSpeed / (g.bonusType == 2 ? 37.5f : 30.f), g.bonusBoosts,
                           g.bonusLastScore);
+            if (g.bonusType == 1)
+                std::snprintf(bonusStatus, sizeof(bonusStatus),
+                              "TRAIL %.1f/31.5 / LAST +%d / REVERSE WHEEL TO BRAKE", g.tunnelTrail,
+                              g.bonusLastScore);
             text(500, 751, bonusStatus, 1.4f, lime);
         } else {
             if (g.boost)

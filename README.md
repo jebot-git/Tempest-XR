@@ -61,8 +61,10 @@ wheel input accumulates; closed webs wrap, and open webs stop at their ends.
 
 In ring and psychedelic bonus stages, the **wheel controls X**, **holding left
 mouse or Up/W moves up**, and **holding right mouse or Down/S moves down**. In the tunnel bonus,
-rotate around the passage using the wheel or Left/Right/A/D. Aim the crosshair through each opening; a miss ends the prototype bonus. Instructions appear in both desktop and XR views. These adapt the original rotary
-controller plus vertical-button controls to a mouse.
+the wheel or Left/Right/A/D adjusts rotation speed; reverse to brake. Stay on
+the green track to grow the trail and score continuously. Going off track
+shrinks the trail; recover before it runs out. Instructions appear in desktop
+and XR views. These adapt the original rotary controller to a mouse.
 
 ## Campaign
 
@@ -74,10 +76,10 @@ object. The original final-wave alias is preserved. Web selection follows
 pulse and powerup-delay tables drive progression, with victory after wave 100.
 
 The generator roster includes flippers, three tanker variants, spikers,
-fuseballs, pulsars, two shielded super-flipper variants, mirrors, hostile droids
+fuseballs, pulsars, two super-flipper variants, mirrors, hostile droids
 and beasts. Tankers release their corresponding pairs. Pulsars electrify lanes
 and split into propagating rim sparks; fuseballs pursue the ship along rails;
-mirrors and shielded enemies reflect normal shots. Enemy projectiles and a
+super flippers take one valid hit. Enemy projectiles and a
 separately acquired friendly firing droid are implemented. Flippers climb to
 the rim before turning toward the ship. Their turning animation and shot
 vulnerability share the source angle state: a correctly timed shot can kill
@@ -241,6 +243,8 @@ streaming performance and comfort still require target-device validation.
 This remains a source-informed recreation: enemy AI, projectile limits, bonus
 inertia, camera motion, modern RGB polygon shading and mixing are adapted rather
 than cycle/pixel-identical Jaguar emulation. The original gate layout, delay and
-modifier data drive the bonus implementation, with source-based first-ring approach timing. The tunnel remains a radial-opening adaptation of the original track/trail bonus; see the behavior audit.
+modifier data drive the bonus implementation, with source-based first-ring approach timing. The tunnel translates the original green-track/trail rules, pattern generators,
+64-segment buffer and continuous score; its geometry, colors and mouse gain are
+adapted for desktop/XR. See the behavior audit.
 Original Classic/Plus/two-player and Beastly modes, the full high-score table and
 EEPROM key algorithms remain outside this implementation.

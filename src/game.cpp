@@ -82,6 +82,9 @@ void Game::start(int startingLevel) {
     bonusTokens = 0;
     bonusesPlayed = 0;
     bonusRuns.fill(0);
+    tunnelPatterns = {TunnelPattern{128, 22, 64, 28, 0x2000, 0x100, 0x800, 0x60},
+                      TunnelPattern{80, 9, 112, 15, 0x6000, 0x280, 0xc00, 0xc0}};
+    tunnelPatternCountdown = 300;
     droidPending = earlyDroid = false;
     pendingBonus = -1;
     returnTime = rechargeDelay = 0;
@@ -128,6 +131,10 @@ void Game::steer(float notches) {
         return;
     }
     if (mode == Mode::Bonus) {
+        if (bonusType == 1) {
+            tunnelVelocity = std::clamp(tunnelVelocity + notches * tunnelWheelGain, -6.f, 6.f);
+            return;
+        }
         bonusX = std::clamp(bonusX + notches * .16f, -4.5f, 4.5f);
         bonusAngle += notches * .19634954f;
         return;
@@ -540,6 +547,8 @@ void Game::startBonus(int type) {
     bonusX = bonusAngle = 0;
     bonusY = bonusType == 1 ? 0.f : .25f / 32; // m7go initializes vp_y=$4000.
     droidActive = false;
+    if (bonusType == 1)
+        startTunnel();
     bonusEntryOffset = entry - (bonusCursor() + Vec3{0, 0, -3.8f});
     bonusCheckTime = 0;
     bonusResultTime = 0;
@@ -575,7 +584,9 @@ float Game::bonusGateDistance(int gate) const {
     // These first-run distances include 60 Hz countdown quantization. Later
     // gaps use (packed delay + 1) * 12 units. Boosts accelerate every
     // approaching gate, rather than assigning each a fixed arrival timestamp.
-    float distance = bonusType == 1 ? 60.f : bonusType == 2 ? 269.375f : 269.5f;
+    if (bonusType == 1)
+        return float((gate + 1) * 16);
+    float distance = bonusType == 2 ? 269.375f : 269.5f;
     for (int i = 0; i < gate; ++i)
         distance += bonusType == 1 ? 13.5f : float(bonusGateDelay(i) + 1) * 12;
     return distance;
@@ -585,10 +596,7 @@ float Game::bonusGateZ(int gate) const {
 }
 Vec3 Game::bonusTarget(int gate) const {
     if (bonusType == 1) {
-        float angle = 0;
-        const auto &course = tunnelCourses[size_t(bonusCourse)];
-        for (int i = 0; i <= std::clamp(gate, 0, 63); i++)
-            angle += float(course[size_t(i)]) * .049087385f;
+        float angle = tunnelTrackAngle();
         return {std::cos(angle) * 1.4f, std::sin(angle) * 1.4f, 0};
     }
     auto &course = ringCourses[size_t(bonusCourse)];
@@ -604,9 +612,15 @@ Vec3 Game::bonusCursor() const {
 void Game::tickBonus(float dt) {
     bonusTime += dt;
     if (bonusFinished) {
+        if (bonusType == 1)
+            tunnelResultTime += dt;
         bonusResultTime -= dt;
         if (bonusResultTime <= 0)
             returnFromBonus();
+        return;
+    }
+    if (bonusType == 1) {
+        tickTunnel(dt);
         return;
     }
     bonusY = std::clamp(bonusY + (float(int(bonusUp) - int(bonusDown)) * 1.6f + bonusImpulse) * dt,

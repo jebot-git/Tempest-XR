@@ -69,9 +69,13 @@ layouts, delays, effect types and eight-course order are imported. After the sou
 approach (about nine seconds for rings), emission gaps use the source countdown and ground speed;
 boosts accelerate all approaching gates by one eighth. Up/down gates apply a
 short vertical impulse. Psycho mode overrides delay to eight as in `cg`.
-`run_gate`/`xbon` accuracy rewards replace flat awards. Tunnel courses preserve
-the 64-step steering sequences. Controls and their inertia are adapted to the
-mouse, rather than reproducing the original mode-7 GPU implementation.
+`run_gate`/`xbon` accuracy rewards replace flat awards. Tunnel courses use all 64 turn bytes, emitting one turn every 16 segments.
+The translated 64-segment buffer, two pattern generators, green-track test,
+trail growth/loss and score tiers run at 60 Hz. Although `tundraw` loads
+`pongyv` into d6, `inst` clears d6 before `dbra d6,inst`: the preserved active
+code advances one segment per frame, rather than the suggested speed ramp.
+The mouse changes angular velocity; opposite input brakes. The wall geometry,
+RGB colors and control gain adapt the Jaguar mode-7 presentation for XR.
 
 The music files remain original module bytes. `modnum=1` is title, 3/4 are bonus,
 and `webtunes` selects gameplay modules in 16-wave blocks (`lsr #4`, despite a

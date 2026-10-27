@@ -286,7 +286,8 @@ int main() {
                     if (type == 1) {
                         float delta = std::atan2(target.y, target.x) - g.bonusAngle;
                         delta = std::atan2(std::sin(delta), std::cos(delta));
-                        g.steer(delta / .19634954f);
+                        float desired = std::clamp(delta * 8.f, -6.f, 6.f);
+                        g.steer((desired - g.tunnelVelocity) / Game::tunnelWheelGain);
                     } else {
                         g.steer((target.x - g.bonusX) / .16f);
                         float correction = (target.y - g.bonusY) * 30 - g.bonusImpulse;
@@ -313,8 +314,8 @@ int main() {
                 }
                 CHECK(g.bonusFinished);
                 CHECK(g.bonusWon);
-                CHECK(g.bonusHits == g.bonusGateCount());
-                step(g, 2.1f);
+                CHECK(g.bonusHits == (type == 1 ? g.tunnelSteps : g.bonusGateCount()));
+                step(g, type == 1 ? 5.1f : 2.1f);
                 CHECK(g.mode == Mode::BonusReturn);
                 CHECK(g.level == startingLevel + 5);
                 g.pause();
