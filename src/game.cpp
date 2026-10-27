@@ -604,7 +604,21 @@ void Game::tick(float dt) {
             continue;
         }
         if (e.kind == Kind::EnemyShot) {
+            float previous = e.depth;
             e.depth -= dt * .55f;
+            for (auto &shot : shots) {
+                // Sweep both projectiles so opposing bullets cannot tunnel
+                // through one another between fixed simulation steps.
+                if (!shot.dead && shot.lane == e.lane && shot.previous <= previous + .035f &&
+                    shot.depth >= e.depth - .035f && spikes[size_t(shot.lane)] >= e.depth - .035f) {
+                    if (!(boost && !shot.ally))
+                        shot.dead = true;
+                    destroy(e);
+                    break;
+                }
+            }
+            if (e.dead)
+                continue;
             if (e.depth <= 0) {
                 if (e.lane == lane)
                     hit();

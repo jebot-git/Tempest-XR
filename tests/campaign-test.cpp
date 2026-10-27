@@ -87,6 +87,27 @@ int main() {
             CHECK(std::hypot(same.x - last.x, same.y - last.y) < .03f);
             CHECK(std::abs(last.z + Game::warpTravel - same.z) < .03f);
         }
+        // Enemy bullets are shootable, including crossing between two ticks.
+        for (int weapon = 0; weapon < 3; ++weapon) {
+            g.start(9);
+            g.autoFire = false;
+            g.boost = weapon == 2;
+            g.spawn(Kind::EnemyShot, 0, .5f);
+            Shot shot{0, .48f, .48f};
+            shot.ally = weapon == 1;
+            g.shots = {shot};
+            g.tick(.02f);
+            CHECK(count(g, Kind::EnemyShot) == 0);
+            CHECK(g.shots.size() == (weapon == 2 ? 1u : 0u));
+            CHECK(g.score == 0);
+        }
+        g.start(9);
+        g.autoFire = false;
+        g.spawn(Kind::EnemyShot, 1, .5f);
+        g.shots = {{0, .48f, .48f}};
+        g.tick(.02f);
+        CHECK(count(g, Kind::EnemyShot) == 1);
+        CHECK(g.shots.size() == 1);
         // Tanker variants must release the corresponding two contents.
         for (auto pair :
              {std::pair{Kind::Tanker, Kind::Flipper}, std::pair{Kind::FuseTanker, Kind::Fuseball},
