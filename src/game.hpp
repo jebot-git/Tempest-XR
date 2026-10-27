@@ -57,8 +57,10 @@ enum class Sound {
     Snatch,
     Yes,
     ClearanceEngine,
-    BonusToken
+    BonusToken,
+    FlipperLand
 };
+enum class FlipperMotion { Climbing, Turning, Stopped };
 struct Enemy {
     Kind kind;
     int lane;
@@ -68,6 +70,9 @@ struct Enemy {
     bool retreating = false;
     int hp = 1;
     float firing = 0;
+    FlipperMotion motion = FlipperMotion::Climbing;
+    int turnFrom = -1;
+    float turnAngle = 0, turnArc = 128, stopTime = 0;
 };
 struct Shot {
     int lane;
@@ -85,6 +90,7 @@ struct Web {
     std::vector<Vec3> points;
     bool closed;
     int start;
+    std::vector<int> orientations;
     int lanes() const {
         return int(points.size()) - (closed ? 0 : 1);
     }
@@ -119,6 +125,8 @@ class Game {
     void tickPickups(float dt);
     void returnFromBonus();
     int directionTo(int from, int to) const;
+    void startFlipperTurn(Enemy &e);
+    float flipRotation(const Enemy &e) const;
 
   public:
     Mode mode = Mode::Menu;
@@ -167,6 +175,8 @@ class Game {
     void spawn(Kind kind, int spawnLane = -1, float depth = 1);
     static Kind kindForSource(int type);
     static bool hostile(Kind kind);
+    static bool flipperKind(Kind kind);
+    static bool shotVulnerable(const Enemy &e);
     bool isBonus() const {
         return mode == Mode::Bonus || (mode == Mode::Paused && pausedFrom == Mode::Bonus);
     }
@@ -180,6 +190,7 @@ class Game {
     }
     bool pulseActive() const;
     Vec3 enemyPosition(const Enemy &e) const;
+    Vec3 enemyTangent(const Enemy &e) const;
     Vec3 bonusTarget(int gate) const;
     Vec3 bonusCursor() const;
     int bonusGateCount() const;

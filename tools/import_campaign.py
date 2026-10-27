@@ -39,6 +39,9 @@ out.append('};')
 for label,kind in [('fz_stuff','l'),('tz_stuff','l'),('sz_stuff','l'),('fuz_stuff','l'),('pudels','w'),('pup_stuff','w')]:
     v=table(label,kind);assert len(v)>=25
     out.append('inline const std::vector<int> %s={%s};'%(label,','.join(map(str,v))))
+for label in ['rospeeds','crossdels','pauses']:
+    v=table(label,'b');assert len(v)==8
+    out.append('inline const std::vector<int> %s={%s};'%(label,','.join(map(str,v))))
 out.append('inline const std::vector<std::vector<uint32_t>> ringCourses={')
 for i in [1,6,3,2,7,5,4,8]:
     v=table(f'course{i}','l');assert len(v)>20

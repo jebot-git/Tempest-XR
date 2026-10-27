@@ -118,6 +118,8 @@ static int effectSample(Sound sound) {
         return 23;
     case Sound::ClearanceEngine:
         return 0;
+    case Sound::FlipperLand:
+        return 28;
     }
     return -1;
 }
@@ -141,6 +143,7 @@ void Audio::play(Sound sound) {
         break;
     case Sound::Kill:
     case Sound::Ricochet:
+    case Sound::FlipperLand:
         priority = 2;
         break;
     case Sound::Zap:

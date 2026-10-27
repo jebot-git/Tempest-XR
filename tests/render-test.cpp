@@ -151,6 +151,20 @@ int main() {
             render(0, 0);
             game.pause();
         }
+        // Actual pivoted rim turns on flat, circular and concave webs.
+        for (int level : {1, 3, 10}) {
+            game.start(level);
+            game.autoFire = false;
+            game.invulnerable = 100;
+            Enemy flipper{Kind::Flipper, game.boundedLane(game.lane - 1), 0};
+            flipper.rim = true;
+            game.enemies = {flipper};
+            for (int frame = 0; frame < 100; ++frame) {
+                game.tick(1.f / 120);
+                if (frame % 10 == 0)
+                    render(0, 0);
+            }
+        }
         game.start(100);
         game.enemies.clear();
         game.enemiesRemaining = 0;

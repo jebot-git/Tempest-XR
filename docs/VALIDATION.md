@@ -3,10 +3,14 @@
 Validated on Linux, 2026-10-27, with SDL 2.32.10, Mesa 26.0.8 and Intel
 ADL-N graphics. Physical headset/WiVRn validation remains outstanding.
 
-The default OpenXR build passes all seven CTest suites. The build configured
-with `TEMPEST_OPENXR=OFF` passes its six applicable suites:
+The default OpenXR build passes all eight CTest suites. The build configured
+with `TEMPEST_OPENXR=OFF` passes its seven applicable suites:
 
 - Gameplay, steering, transitions and ship-follow camera.
+- Timed rim combat: source angular windows (including concave-web wrap), early
+  and departed-shot misses, capture lanes, pause/jump, rotation/pause tuning,
+  continuous animation endpoints across all campaign webs, and impact ordering
+  for normal/friendly/laser fire, enemy bullets and spikes.
 - Audit regressions, all enemy families and 100 wave generation budgets,
   powerups, both zaps, bonus courses, death/respawn and campaign victory.
 - Original tracker decoding, module selection and pause behavior.
@@ -14,7 +18,7 @@ with `TEMPEST_OPENXR=OFF` passes its six applicable suites:
   two/six channel limits, sample-only voices with SFX muted, detuned pairs,
   priority stealing, music context changes/retry, and frozen playback while paused.
 - OpenGL sky coverage, original raster/font assets, mesh animation, HUD states,
-  bonus scenes, death effects and frame feedback.
+  bonus scenes, actual rim turns on circular/flat/concave webs, death effects and frame feedback.
 - Original module/sample/art hashes and alpha-masked CRY conversion.
 - Injected OpenXR runtime failure: play pauses and capture, relative mouse mode
   and XR intent are released before the process exits.
@@ -32,7 +36,7 @@ for all three families. Boundary deltas must stay below 0.03 meters per 120 Hz
 tick. Explosion/capture paths also test pause, frozen combat, same-wave respawn,
 final-life behavior and camera continuity, with a 0.06-meter tick limit.
 
-The campaign executable passes AddressSanitizer and UndefinedBehaviorSanitizer.
+The campaign and timed rim-combat executables pass AddressSanitizer and UndefinedBehaviorSanitizer.
 Regenerating webs, campaign tables, meshes, original art/font maps and sample
 metadata from the pinned source reproduces their output bytes exactly.
 

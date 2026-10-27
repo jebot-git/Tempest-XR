@@ -61,6 +61,9 @@ struct AudioProbe {
         CHECK(std::all_of(pcm.begin(), pcm.end(), [](float v) { return v == 0; }));
         audio.suspended = false;
         audio.voices = {};
+        audio.play(Sound::FlipperLand);
+        CHECK(audio.voices[0].sample == 28 && audio.voices[0].priority == 2);
+        audio.voices = {};
         audio.play(Sound::OneUp);
         CHECK(audio.voices[0].remaining > 0 && audio.voices[1].remaining == 0);
         audio.voices = {};

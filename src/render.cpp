@@ -362,10 +362,7 @@ void Renderer::flush() {
 }
 void Renderer::enemy(const Game &g, const Enemy &e) {
     Vec3 p = g.enemyPosition(e);
-    auto a = g.edge(e.lane, e.depth), b = g.edge(e.lane + 1, e.depth);
-    Vec3 tangent = b - a;
-    float length = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
-    tangent = tangent * (1 / std::max(.001f, length));
+    Vec3 tangent = g.enemyTangent(e);
     Vec3 normal = {-tangent.y, tangent.x, 0};
     float s = e.kind == Kind::Tanker ? .13f : .095f;
     auto point = [&](float x, float y) { return p + tangent * (x * s) + normal * (y * s); };
@@ -416,14 +413,11 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
         return;
     }
     if (original) {
-        bool flip = e.kind == Kind::Flipper || e.kind == Kind::SuperFlipper ||
-                    e.kind == Kind::SuperFlipper2;
-        float fold = flip && e.flip < .2f ? std::cos(e.flip / .2f * 3.14159265f) : 1;
         mesh(original, p, tangent, normal, s, c,
              e.kind == Kind::Mirror || e.kind == Kind::Adroid || e.kind == Kind::EnemyShot
                  ? g.time * 3
                  : 0,
-             fold);
+             1);
         if (e.kind == Kind::PulsarTanker)
             mesh("spuls4", p + Vec3{0, 0, .005f}, tangent, normal, s * .55f, amber);
         if (e.kind == Kind::FuseTanker)
@@ -481,7 +475,7 @@ void Renderer::enemy(const Game &g, const Enemy &e) {
         }
     } else if (e.kind == Kind::Flipper || e.kind == Kind::SuperFlipper ||
                e.kind == Kind::SuperFlipper2) {
-        float f = std::cos(e.flip * 5);
+        float f = 1;
         line(point(-1.4f, -.8f), point(1.4f, .8f * f), c);
         line(point(1.4f, .8f * f), point(-1.4f, .8f), c);
         line(point(-1.4f, .8f), point(1.4f, -.8f * f), c);

@@ -2,6 +2,8 @@
 #include "campaign.hpp"
 #include "webs.hpp"
 #include <iterator>
+#include <queue>
+#include <tuple>
 
 namespace tempest {
 float Game::randf(float lo, float hi) {
@@ -9,7 +11,7 @@ float Game::randf(float lo, float hi) {
 }
 static Web makeWeb(int level) {
     const auto &raw = rawWebs[webOrder[16 + (std::max(1, level) - 1) % 32]];
-    Web web{raw.name, {}, raw.closed, raw.start};
+    Web web{raw.name, {}, raw.closed, raw.start, raw.orientations};
     float minX = 100, maxX = -100, minY = 100, maxY = -100;
     for (size_t i = 0; i < raw.xy.size(); i += 2) {
         minX = std::min(minX, raw.xy[i]);
@@ -167,8 +169,75 @@ Vec3 Game::position(float lp, float depth) const {
     };
     return center(l) * (1 - u) + center(l + 1) * u;
 }
+bool Game::flipperKind(Kind kind) {
+    return kind == Kind::Flipper || kind == Kind::SuperFlipper || kind == Kind::SuperFlipper2 ||
+           kind == Kind::Beast;
+}
+bool Game::shotVulnerable(const Enemy &e) {
+    return !flipperKind(e.kind) || e.motion != FlipperMotion::Turning ||
+           std::abs(std::remainder(e.turnArc - e.turnAngle, 256.f)) <= 52.f;
+}
+void Game::startFlipperTurn(Enemy &e) {
+    int delta = e.lane - lane;
+    if (delta == 0) {
+        e.motion = FlipperMotion::Stopped;
+        return;
+    }
+    int direction = delta > 0 ? -1 : 1;
+    // _fset's exact half-web tie goes the other way, including circular wrap.
+    if (web.closed && std::abs(delta) >= web.lanes() / 2)
+        direction = -direction;
+    int destination = boundedLane(e.lane + direction);
+    if (destination == e.lane) {
+        direction = -direction;
+        destination = boundedLane(e.lane + direction);
+    }
+    e.turnFrom = e.lane;
+    e.lane = destination; // Source collision lane is the destination during a turn.
+    e.direction = direction;
+    int difference = web.orientations[size_t(destination)] - web.orientations[size_t(e.turnFrom)];
+    int arc = (128 + direction * difference) % 256;
+    if (arc <= 0)
+        arc += 256;
+    e.turnArc = float(arc);
+    e.turnAngle = 0;
+    e.motion = FlipperMotion::Turning;
+}
+float Game::flipRotation(const Enemy &e) const {
+    if (!flipperKind(e.kind) || e.motion != FlipperMotion::Turning || e.turnFrom < 0)
+        return 0;
+    int pivot = e.turnFrom + (e.direction > 0 ? 1 : 0);
+    Vec3 a = position(float(e.turnFrom), e.depth) - edge(pivot, e.depth),
+         b = position(float(e.lane), e.depth) - edge(pivot, e.depth);
+    float angle = std::atan2(a.x * b.y - a.y * b.x, a.x * b.x + a.y * b.y);
+    constexpr float tau = 6.283185307f;
+    if (e.direction > 0 && angle >= 0)
+        angle -= tau;
+    if (e.direction < 0 && angle <= 0)
+        angle += tau;
+    return angle * std::clamp(e.turnAngle / e.turnArc, 0.f, 1.f);
+}
 Vec3 Game::enemyPosition(const Enemy &e) const {
+    if (flipperKind(e.kind) && e.motion == FlipperMotion::Turning && e.turnFrom >= 0) {
+        int pivotLane = e.turnFrom + (e.direction > 0 ? 1 : 0);
+        Vec3 pivot = edge(pivotLane, e.depth), a = position(float(e.turnFrom), e.depth) - pivot,
+             b = position(float(e.lane), e.depth) - pivot;
+        float angle = flipRotation(e), radius = std::hypot(a.x, a.y),
+              u = std::clamp(e.turnAngle / e.turnArc, 0.f, 1.f),
+              scale = (radius * (1 - u) + std::hypot(b.x, b.y) * u) / std::max(.0001f, radius);
+        return pivot + Vec3{(a.x * std::cos(angle) - a.y * std::sin(angle)) * scale,
+                            (a.x * std::sin(angle) + a.y * std::cos(angle)) * scale, 0};
+    }
     return e.kind == Kind::Fuseball ? edge(e.lane + 1, e.depth) : position(float(e.lane), e.depth);
+}
+Vec3 Game::enemyTangent(const Enemy &e) const {
+    int visualLane = flipperKind(e.kind) && e.motion == FlipperMotion::Turning && e.turnFrom >= 0
+                         ? e.turnFrom
+                         : e.lane;
+    Vec3 t = edge(visualLane + 1, e.depth) - edge(visualLane, e.depth);
+    float angle = flipRotation(e), length = std::max(.0001f, std::hypot(t.x, t.y));
+    return {(t.x * std::cos(angle) - t.y * std::sin(angle)) / length,
+            (t.x * std::sin(angle) + t.y * std::cos(angle)) / length, 0};
 }
 Vec3 Game::shipPosition() const {
     if (deathTime > 0) {
@@ -756,7 +825,17 @@ void Game::tick(float dt) {
     }
     tickPickups(dt);
     std::vector<Enemy> children;
-    for (auto &e : enemies) {
+    struct MotionFrame {
+        float depth = 0, angleStart = 0, angleEnd = 0, arc = 0;
+        bool turning = false, turnBegan = false;
+    };
+    std::vector<MotionFrame> motion(enemies.size());
+    // Complete movement before resolving impacts. Entity storage order must not
+    // decide which of two enemies in the same lane consumes a normal shot.
+    for (size_t index = 0; index < enemies.size(); ++index) {
+        auto &e = enemies[index];
+        auto &frame = motion[index];
+        frame.depth = e.depth;
         if (e.dead)
             continue;
         e.age += dt;
@@ -765,26 +844,7 @@ void Game::tick(float dt) {
         if (e.kind == Kind::Powerup)
             continue;
         if (e.kind == Kind::EnemyShot) {
-            float previous = e.depth;
             e.depth -= dt * .55f;
-            for (auto &shot : shots) {
-                // Sweep both projectiles so opposing bullets cannot tunnel
-                // through one another between fixed simulation steps.
-                if (!shot.dead && shot.lane == e.lane && shot.previous <= previous + .035f &&
-                    shot.depth >= e.depth - .035f && spikes[size_t(shot.lane)] >= e.depth - .035f) {
-                    if (!(boost && !shot.ally))
-                        shot.dead = true;
-                    destroy(e);
-                    break;
-                }
-            }
-            if (e.dead)
-                continue;
-            if (e.depth <= 0) {
-                if (e.lane == lane)
-                    hit();
-                e.dead = true;
-            }
             continue;
         }
         int tableIndex = std::min(int(fz_stuff.size()) - 1, (level - 1) / 2);
@@ -799,7 +859,43 @@ void Game::tick(float dt) {
             speed *= 1.25f;
         if (e.kind == Kind::Beast)
             speed *= 1.6f;
-        if (!e.rim) {
+        if (flipperKind(e.kind)) {
+            // sweb fixes the T2K rotation-table selector to 16, then indexes
+            // rospeeds -> crossdels -> pauses. Counter expiry includes zero.
+            int rotation = rospeeds[1];
+            float pause = float(pauses[size_t(crossdels[size_t(rotation)])] + 1) / 60;
+            if (e.rim && e.motion == FlipperMotion::Climbing)
+                e.motion = FlipperMotion::Stopped;
+            if (e.motion == FlipperMotion::Climbing) {
+                e.depth = std::max(0.f, e.depth - dt * speed);
+                if (e.depth == 0) {
+                    e.rim = true;
+                    startFlipperTurn(e);
+                }
+            } else if (e.motion == FlipperMotion::Turning) {
+                frame.turning = true;
+                frame.angleStart = e.turnAngle;
+                frame.arc = e.turnArc;
+                float angularSpeed =
+                    float(rotation * 60) * (e.kind == Kind::SuperFlipper ? 2.f : 1.f);
+                frame.angleEnd = e.turnAngle + dt * angularSpeed;
+                e.turnAngle = std::min(e.turnArc, frame.angleEnd);
+                if (e.turnAngle >= e.turnArc) {
+                    e.motion = FlipperMotion::Stopped;
+                    e.stopTime = e.kind == Kind::Flipper ? pause : 0;
+                    sounds.push_back(Sound::FlipperLand);
+                }
+            } else {
+                e.stopTime -= dt;
+                if (e.stopTime <= 0)
+                    startFlipperTurn(e);
+            }
+            if (!frame.turning && e.motion == FlipperMotion::Turning) {
+                frame.turning = frame.turnBegan = true;
+                frame.angleStart = frame.angleEnd = e.turnAngle;
+                frame.arc = e.turnArc;
+            }
+        } else if (!e.rim) {
             e.depth += dt * speed * (e.retreating ? 1.5f : -1.f);
             if (e.kind == Kind::Spiker) {
                 spikes[size_t(e.lane)] = std::min(spikes[size_t(e.lane)], e.depth);
@@ -816,13 +912,7 @@ void Game::tick(float dt) {
             if (e.kind == Kind::Mirror)
                 e.depth = std::max(.25f, e.depth);
         }
-        bool flipper = e.kind == Kind::Flipper || e.kind == Kind::SuperFlipper ||
-                       e.kind == Kind::SuperFlipper2 || e.kind == Kind::Beast;
-        float flipDelay = e.rim ? .22f : std::max(.22f, 1.6f - float(level) * .012f);
-        if (e.kind == Kind::Beast)
-            flipDelay *= .5f;
-        if ((flipper && e.depth < .7f && e.flip > flipDelay) ||
-            (e.kind == Kind::Fuseball && e.flip > (e.rim ? .25f : .55f)) ||
+        if ((e.kind == Kind::Fuseball && e.flip > (e.rim ? .25f : .55f)) ||
             (e.kind == Kind::PulsarSpark && e.flip > .16f) ||
             (e.kind == Kind::Adroid && e.rim && e.flip > .4f)) {
             int dir = e.kind == Kind::Fuseball ? directionTo(e.lane, lane) : e.direction;
@@ -835,30 +925,120 @@ void Game::tick(float dt) {
             e.lane = boundedLane(e.lane + dir);
             e.flip = 0;
         }
-        if ((e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark) && pulseActive() &&
-            e.lane == lane)
-            hit();
-        if (e.kind == Kind::Adroid && e.rim && std::fmod(e.age, 2.f) > .9f && e.lane == lane)
-            hit();
         if (level >= 9 && e.kind != Kind::Fuseball && e.kind != Kind::PulsarSpark &&
             e.kind != Kind::Mirror && e.firing <= 0 && e.depth > .1f) {
             if (children.size() < 12)
                 children.push_back(makeEnemy(Kind::EnemyShot, e.lane, e.depth, e.direction));
             e.firing = std::max(1.2f, 6.f - float(level) * .04f) + randf(0, 2);
         }
-        bool shotHit = false, powered = false;
-        for (auto &s : shots)
-            if (!s.dead && s.lane == e.lane && spikes[size_t(s.lane)] >= e.depth - .06f &&
-                s.depth >= e.depth - .035f && s.previous <= e.depth + .06f) {
-                if (e.kind == Kind::Fuseball && e.flip < .13f && !boost)
+    }
+    struct Impact {
+        float time, depth;
+        size_t shot;
+        int enemy; // -1 is a spike.
+        int kind, lane;
+    };
+    auto later = [](const Impact &a, const Impact &b) {
+        return std::tie(a.time, a.depth, a.kind, a.lane, a.shot, a.enemy) >
+               std::tie(b.time, b.depth, b.kind, b.lane, b.shot, b.enemy);
+    };
+    std::priority_queue<Impact, std::vector<Impact>, decltype(later)> impacts(later);
+    auto interval = [](float start, float delta, float low, float high, float &enter, float &exit) {
+        if (std::abs(delta) < .000001f)
+            return start >= low && start <= high;
+        float a = (low - start) / delta, b = (high - start) / delta;
+        if (a > b)
+            std::swap(a, b);
+        enter = std::max(enter, a);
+        exit = std::min(exit, b);
+        return enter <= exit;
+    };
+    // colok's six source units on a 160-unit web, with swept relative motion.
+    const float hitRadius = std::nextafter(6.f / 160, 0.f); // source comparison is strict
+    for (size_t si = 0; si < shots.size(); ++si) {
+        const auto &shot = shots[si];
+        if (shot.dead)
+            continue;
+        float step = shot.depth - shot.previous;
+        for (size_t ei = 0; ei < enemies.size(); ++ei) {
+            const auto &e = enemies[ei];
+            const auto &frame = motion[ei];
+            if (e.dead || e.kind == Kind::Powerup ||
+                shot.lane != (frame.turnBegan ? e.turnFrom : e.lane))
+                continue;
+            bool powered = boost && !shot.ally;
+            if (e.kind == Kind::Fuseball && e.flip < .13f && !powered)
+                continue;
+            float enter = 0, exit = 1;
+            if (!interval(shot.previous - frame.depth, step - (e.depth - frame.depth), -hitRadius,
+                          hitRadius, enter, exit))
+                continue;
+            if (frame.turning && !frame.turnBegan) {
+                // flipcollie tests the wrapped target-angle distance <= 52.
+                // Intersect that window with the projectile contact interval:
+                // a shot which already left before vulnerability opens misses.
+                float remaining = frame.arc - frame.angleStart,
+                      delta = frame.angleStart - frame.angleEnd, earliest = 2;
+                for (auto range : {std::pair{-10000.f, 52.f}, std::pair{204.f, 256.f}}) {
+                    float a = enter, b = exit;
+                    if (interval(remaining, delta, range.first, range.second, a, b))
+                        earliest = std::min(earliest, a);
+                }
+                if (earliest > 1)
                     continue;
-                shotHit = true;
-                powered = boost && !s.ally;
-                if (!powered)
-                    s.dead = true; // Particle laser can pierce multiple objects.
-                break;
+                enter = earliest;
             }
-        if (tanker && (shotHit || e.depth < .22f)) {
+            float depth = frame.depth + (e.depth - frame.depth) * enter;
+            impacts.push({enter, depth, si, int(ei), int(e.kind), e.lane});
+        }
+        float tip = spikes[size_t(shot.lane)];
+        if (tip < .99f && step > 0 && shot.previous <= tip && shot.depth >= tip)
+            impacts.push({(tip - shot.previous) / step, tip, si, -1, -1, shot.lane});
+    }
+    std::vector<bool> enemyHit(enemies.size(), false);
+    while (!impacts.empty()) {
+        auto impact = impacts.top();
+        impacts.pop();
+        auto &shot = shots[impact.shot];
+        if (shot.dead)
+            continue;
+        bool powered = boost && !shot.ally;
+        if (impact.enemy < 0) {
+            auto &tip = spikes[size_t(shot.lane)];
+            // Earlier bullets may have shortened this spike. Reschedule this
+            // contact at its new tip instead of consuming a shot in empty space.
+            if (tip != impact.depth) {
+                if (tip < .99f && shot.previous <= tip && shot.depth >= tip)
+                    impacts.push({(tip - shot.previous) / (shot.depth - shot.previous), tip,
+                                  impact.shot, -1, -1, shot.lane});
+                continue;
+            }
+            if (!powered)
+                shot.dead = true;
+            burst(position(float(shot.lane), tip), 2, 5);
+            tip = std::min(1.f, tip + (powered ? .2f : .09f));
+            addScore(3);
+            continue;
+        }
+        auto &e = enemies[size_t(impact.enemy)];
+        if (e.dead || enemyHit[size_t(impact.enemy)])
+            continue;
+        enemyHit[size_t(impact.enemy)] = true;
+        if (motion[size_t(impact.enemy)].turnBegan) {
+            // rail/stdstop test bullets before changing lanes. In particular,
+            // a pickup from that kill belongs to the lane the flipper occupied.
+            e.lane = e.turnFrom;
+            e.motion = FlipperMotion::Stopped;
+        }
+        if (!powered)
+            shot.dead = true;
+        if (e.kind == Kind::EnemyShot) {
+            destroy(e);
+            continue;
+        }
+        bool tanker =
+            e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker;
+        if (tanker) {
             Kind contents = e.kind == Kind::FuseTanker     ? Kind::Fuseball
                             : e.kind == Kind::PulsarTanker ? Kind::Pulsar
                                                            : Kind::Flipper;
@@ -866,25 +1046,64 @@ void Game::tick(float dt) {
                 children.push_back(
                     makeEnemy(contents, boundedLane(e.lane + d), std::max(.16f, e.depth), d));
             destroy(e);
+        } else if (e.kind == Kind::Mirror || e.kind == Kind::SuperFlipper ||
+                   e.kind == Kind::SuperFlipper2) {
+            e.hp -= powered ? 2 : 1;
+            if (!powered)
+                children.push_back(makeEnemy(Kind::EnemyShot, e.lane, e.depth, 1));
+            if (e.kind == Kind::Mirror)
+                e.depth += .15f;
+            if (e.hp > 0 && e.depth < 1) {
+                burst(enemyPosition(e), 1, 8);
+                sounds.push_back(Sound::Ricochet);
+            } else
+                destroy(e);
+        } else if (e.kind == Kind::Beast && --e.hp > 0 && !powered) {
+            e.direction = -e.direction;
+        } else
+            destroy(e);
+    }
+    // A stopped flipper checks bullets before capturing the player (stdstop).
+    // During an invulnerable turn it can instead catch the lane it is leaving.
+    for (size_t index = 0; index < enemies.size(); ++index) {
+        auto &e = enemies[index];
+        const auto &frame = motion[index];
+        if (e.dead || e.kind == Kind::Powerup)
+            continue;
+        if (e.kind == Kind::EnemyShot) {
+            if (e.depth <= 0) {
+                if (e.lane == lane)
+                    hit();
+                e.dead = true;
+            }
             continue;
         }
-        if (shotHit) {
-            if (e.kind == Kind::Mirror || e.kind == Kind::SuperFlipper ||
-                e.kind == Kind::SuperFlipper2) {
-                e.hp -= powered ? 2 : 1;
-                if (!powered)
-                    children.push_back(makeEnemy(Kind::EnemyShot, e.lane, e.depth, 1));
-                if (e.kind == Kind::Mirror)
-                    e.depth += .15f;
-                if (e.hp > 0 && e.depth < 1) {
-                    burst(enemyPosition(e), 1, 8);
-                    sounds.push_back(Sound::Ricochet);
-                    continue;
-                }
-            } else if (e.kind == Kind::Beast && --e.hp > 0 && !powered) {
-                e.direction = -e.direction;
-                continue;
+        if (flipperKind(e.kind)) {
+            bool catches =
+                frame.turning ? !shotVulnerable(e) && e.turnFrom == lane : e.rim && e.lane == lane;
+            if (catches) {
+                hit(true);
+                if (deathTime > 0 && snatched)
+                    e.dead = true;
             }
+            if (e.rim && e.age > 24)
+                e.dead = true;
+            continue;
+        }
+        if ((e.kind == Kind::Pulsar || e.kind == Kind::PulsarSpark) && pulseActive() &&
+            e.lane == lane)
+            hit();
+        if (e.kind == Kind::Adroid && e.rim && std::fmod(e.age, 2.f) > .9f && e.lane == lane)
+            hit();
+        bool tanker =
+            e.kind == Kind::Tanker || e.kind == Kind::FuseTanker || e.kind == Kind::PulsarTanker;
+        if (tanker && e.depth < .22f) {
+            Kind contents = e.kind == Kind::FuseTanker     ? Kind::Fuseball
+                            : e.kind == Kind::PulsarTanker ? Kind::Pulsar
+                                                           : Kind::Flipper;
+            for (int d : {-1, 1})
+                children.push_back(
+                    makeEnemy(contents, boundedLane(e.lane + d), std::max(.16f, e.depth), d));
             destroy(e);
             continue;
         }
@@ -900,23 +1119,10 @@ void Game::tick(float dt) {
                 e.dead = true;
                 continue;
             }
-            if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane)) {
-                hit(flipper);
-                if (flipper && deathTime > 0 && snatched)
-                    e.dead = true;
-            }
+            if (e.lane == lane || (e.kind == Kind::Fuseball && boundedLane(e.lane + 1) == lane))
+                hit();
             if (e.age > 24)
                 e.dead = true;
-        }
-    }
-    for (auto &s : shots) {
-        auto &tip = spikes[size_t(s.lane)];
-        if (!s.dead && tip < .99f && s.depth >= tip && s.previous <= tip + .04f) {
-            if (!boost)
-                s.dead = true;
-            burst(position(float(s.lane), tip), 2, 5);
-            tip = std::min(1.f, tip + (boost ? .2f : .09f));
-            addScore(3);
         }
     }
     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [](auto &e) { return e.dead; }),

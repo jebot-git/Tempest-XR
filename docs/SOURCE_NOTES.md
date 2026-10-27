@@ -9,7 +9,7 @@ Jeff Minter / Atari. Source preservation/annotations: upstream contributors.
 | `web1` … `web37`, `raw_webs`, `sweb` | Original outlines, topology and spawn lanes. Tempest 2000 selects index `16 + ((level-1)&31)` from the shared 48-entry table. |
 | `_nw1` … `_nw100`, `setnewgen`, `newgen`, `inits` | All original generation budgets and independent spawn periods. First spawn waits half a period; each subsequent spawn waits a full period. |
 | `fz_stuff`, `tz_stuff`, `sz_stuff`, `fuz_stuff`, `pudels`, `pup_stuff` | Original speed, pulse and pickup-delay tables. |
-| `run_flipper`, `flipmodes`, `make_sflip2/3`, `make_beast` | Climbing, lane changes, rim movement, shield/ricochet and beast behaviors. |
+| `run_flipper`, `flipmodes`, `make_sflip2/3`, `make_beast` | Straight climb, source-angle rim turns/shot windows, pursuit, stopped pauses and landing sample; shield/ricochet and special beast states remain adapted. |
 | `maketank`, `openflippers`, `openfuseballs`, `openpulsars` | Three tanker families release the corresponding pairs. |
 | `run_fuseball`, `climbrail`, `run_pulsar`, `run_pspark` | Rail pursuit, lane electrification and propagating rim sparks. |
 | `rumirr`, `refsht`, `run_adroid`, `run_ashot` | Mirrors, reflected/projectile fire and hostile droid hazards. |
@@ -52,7 +52,10 @@ manifests record source URLs, sizes and hashes. No ROM is used.
 
 A web header stores the last vertex index. Closed webs therefore have one more
 lane than open webs with the same number of vertices. The repeated vertex and
-connection sentinel must not become extra lanes. Coordinates are recentered,
+connection sentinel must not become extra lanes. Original lane orientation words
+are also imported, including the internal `w16col` label. Rim rotation uses the
+T2K `rospeeds` → `crossdels` → `pauses` selection. `flipcollie` uses a signed
+wrapped angle distance ≤52; `colok` uses a strict six-unit depth radius. Coordinates are recentered,
 Y-flipped and scaled; the open plane is offset downward for visibility.
 
 The wave header's original annotation says duration, but the executable

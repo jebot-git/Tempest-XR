@@ -78,7 +78,11 @@ fuseballs, pulsars, two shielded super-flipper variants, mirrors, hostile droids
 and beasts. Tankers release their corresponding pairs. Pulsars electrify lanes
 and split into propagating rim sparks; fuseballs pursue the ship along rails;
 mirrors and shielded enemies reflect normal shots. Enemy projectiles and a
-separately acquired friendly firing droid are implemented.
+separately acquired friendly firing droid are implemented. Flippers climb to
+the rim before turning toward the ship. Their turning animation and shot
+vulnerability share the source angle state: a correctly timed shot can kill
+before capture, while an already departed shot misses. Hits resolve in impact
+order so an enemy farther down the lane cannot steal a shot from a rim target.
 
 Powerups progress through **particle laser → points → jump → points → friendly
 droid → bonus token**, followed by additional point awards. The first killed
@@ -204,7 +208,7 @@ SDL_VIDEODRIVER=offscreen SDL_AUDIODRIVER=dummy \
 python3 tools/test_xr.py              # Optional Monado simulated HMD + compatible GPU
 ```
 
-Tests cover the three audited regressions, enemy behaviors, all 100 generation
+Tests cover timed rim shots/capture, angular windows, impact ordering, the three audited regressions, enemy behaviors, all 100 generation
 budgets, powerup/droid progression, both zaps, bonus success/failure and victory.
 Tests complete all 24 bonus courses using public wheel/button controls, and
 verify projectile interception, continuous bonus boundaries and death/respawn.

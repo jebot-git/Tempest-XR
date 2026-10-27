@@ -29,8 +29,8 @@ These are actionable fidelity gaps, not defects proven absent by tests.
 
 | Area | Original behavior | Current behavior / gap |
 |---|---|---|
-| Flippers | `flipmodes` → `rail`, `flipto`, `stopped`; target-directed flips, rotation windows, pause counters, special rail/stop variants (11007–11559) | Depth/timer lane changes and a persistent random direction. Ordinary flippers can change lanes before the rim. Target pursuit, rotation collision windows and stop-state transitions need a direct port. |
-| Super flippers / beasts | `make_sflip2/3`, `superflip`, `railopts`, `sstopmodes`, `beastrail` include different transformations, directed flip sequences and reflected shot forms | HP, speed multipliers and generic reflected bullets approximate these states. Tanker contents do not undergo the source's probability-based super-flipper transformations. |
+| Flippers | `flipmodes` → `rail`, `flipto`, `stopped`; target-directed flips, rotation windows, pause counters, special rail/stop variants (11007–11559) | Corrected in the rim-combat follow-up: straight climb, target-directed rim turns, source orientation/rotation/pause data, wrapped 52-unit shot window, vacated-lane capture and continuous pivot animation. Impact order is independent of enemy storage order. Tanker-emergence submodes and the existing 24-second rim expiry remain adaptations. |
+| Super flippers / beasts | `make_sflip2/3`, `superflip`, `railopts`, `sstopmodes`, `beastrail` include different transformations, directed flip sequences and reflected shot forms | Shared rim turn/window behavior and mode-2 double rotation speed are corrected. HP, climbing speed multipliers and generic reflected bullets still approximate other states. Mode-3 down-web turns/reversed pursuit, directed multi-flip sequences and tanker super-flipper transformations remain incomplete. |
 | Tankers | Three content dispatches, reservations of three object slots; open at top or on hit; paired sound 17 at pitch 60/61 (11620–11817) | Correct content families and pairs, but opening depth is .22 of the web instead of the source rim threshold. Generic kill sound and scoring path; slot reservations and some child states are absent. |
 | Spikers / spikes | `spiker_vex` chooses an empty lane or shortest existing spike, build/retreat counters, one-spiker capacity; spikes have independent geometry and optional super state (11844–12105) | Continuous growth, fixed retreat threshold, then adjacent-lane restart; generic 24-second expiry. No shortest-spike selection, source capacity/build counters or super spikes. Shot shortening amounts differ. |
 | Fuseballs | `fuse_vex` alternates rail climb and interpolated crossing; collision vulnerable only during particular crossing counts; player-seeking direction (12232–12413) | Player-seeking rail changes exist, but movement, crossing timing, vulnerability windows and geometry are simplified. |
@@ -40,7 +40,7 @@ These are actionable fidelity gaps, not defects proven absent by tests.
 | Hostile droid | `adroidmodes`: `admove`, `adgmove`, `zappage`, `uppweb` (10869) | Generic climber/rim mover with timed lane attack. Full four-state travel, zap and retreat behavior is absent. |
 | Friendly droid | `rundroid` uses nearest threat, 16-step movement and a separate shot budget, enlarged by `adenoid` | Nearest-enemy aiming exists; continuous steering and fixed fire delay replace source movement and budget. Lifecycle/deferred pickup is now corrected. |
 | Projectile generation | `alienfire`, 10245–10285: global fire counter, bounded `ashots`, eligible enemy states/depths | Per-enemy firing timers from level 9, with a generic child cap. Bullets can accumulate beyond source limits. |
-| Player fire | `sweb` initializes shot counters; `sclawr` uses fire delay and `bullmax` slots, with laser/droid changes | Normal/laser cadence, travel speed and slot limits are adapted. No explicit source bullet-slot pool. Swept projectile interception is implemented. |
+| Player fire | `sweb` initializes shot counters; `sclawr` uses fire delay and `bullmax` slots, with laser/droid changes | Normal/laser cadence, travel speed and slot limits are adapted. No explicit source bullet-slot pool. Swept relative motion now resolves impacts in time/depth order, including spikes and enemy bullets; six-source-unit hit radius is strict. Friendly shots obey the same first-contact rules and particle laser pierces. |
 | Reflected projectiles | `refsht` and `refsht2` have distinct speeds, spin and interception rules | Merged with ordinary EnemyShot, making all reflected forms interceptable with the same rules. |
 | Superzapper | `run_objects`/`collie` select enemies on every fourth frame; emergency zap ends after one; source temporarily changes wave speed | First zap destroys all targets immediately; second destroys one. Both visual effects exist, but selection pacing and temporary slowdown differ. Spikes survive. |
 | Pickups | `run_pup` has initial rez delay, travel, collection depth window, consumed flash; `pupvex` has eight entries | Six main stages and point repeats exist, but rez/travel/expiry/flash timings are adapted. Rare `suprise` → infinite zap / `outta here` early exit is missing. |
@@ -84,7 +84,7 @@ Every slot in the original update dispatch is classified below. “Adapted” in
 |---:|---|---|
 | 0 | `rrts` | No-op represented by mode/state checks |
 | 1 | `player_shot` | Adapted Shot travel/lifetime |
-| 2 | `run_flipper` | Adapted; state-machine gaps above |
+| 2 | `run_flipper` | Straight climb / rim turn / stopped states; remaining subtype gaps above |
 | 3 | `run_zap` | Adapted explosion/flash |
 | 4 | `kill_shot` | Shot removal |
 | 5 | `run_tanker` | Three content families, adapted opening |
@@ -153,4 +153,31 @@ The 27 `solids` slots include no-op, flipper, three tankers, shot, fuseball, pul
 
 Regression tests exercise the corrected droid lifecycle/deferred grant, clearance-before-bonus order, bonus family boundaries, first-ring distance, ring/psycho completion award, continuous and pausable bonus return, automatic music selection after preview, failed-track retry, source PCM rate/pitch/loops, two/six channel limits and sample-only voices. All 24 prototype bonus courses are completed with public controls. This does not validate the absent tunnel rules or exact Jaguar AI.
 
-Priority order for further source fidelity: (1) flipper/super/beast and hostile-droid state machines, (2) pulsar spark collision/edge behavior and exact pulse phases, (3) original tunnel track/trail/scoring, (4) source firing/capacity rules and spiker selection, (5) score contexts/rare pickups/one-up state, (6) remaining individual effects, music fade and frontend variants. Replacing these with faithful state transitions requires dedicated regressions; it cannot be established by existing roster and rendering tests alone.
+Priority order for further source fidelity: (1) remaining super/beast/tanker-emergence and hostile-droid states, (2) pulsar spark collision/edge behavior and exact pulse phases, (3) original tunnel track/trail/scoring, (4) source firing/capacity rules and spiker selection, (5) score contexts/rare pickups/one-up state, (6) remaining individual effects, music fade and frontend variants. Replacing these with faithful state transitions requires dedicated regressions; it cannot be established by existing roster and rendering tests alone.
+
+## Rim-combat follow-up
+
+`tests/rim-combat-test.cpp` reproduces the original reports and verifies public
+fire-button timing, early/departed-shot misses, hits at the 52-unit boundary,
+wrapped windows on concave webs, vacated-lane capture, pause, jump protection,
+mode-2 rotation speed, landing pauses/chase direction, and smooth endpoints on
+all campaign webs. Both orders of the rim/behind-enemy reproduction now give
+the same result with normal, friendly and particle-laser shots. Opposing bullets
+and spike occlusion use the same impact ordering. A pre-turn kill drops its
+pickup in the original lane.
+
+The source `flipcollie` compares the **signed, wrapped** target-angle distance
+with 52. Usually this opens toward the end of a turn; some concave-web turns
+start inside the wrapped window, leave it, then reopen it. A projectile must
+actually overlap during that window. Merely having fired earlier is insufficient.
+`rail`/`stdstop` check bullets before starting the next turn, so an existing shot
+can still kill in the lane being left. A completed turn does not capture in the
+destination until the stopped state runs.
+
+The new animation rotates the centre around the shared rim vertex and blends
+unequal lane radii to keep endpoints continuous. This is a geometric adaptation
+of the source pivot; original integer projection and polygon rasterization are
+not reproduced. Collision windows use the imported source orientation words
+rather than approximating their values from modern geometry. The impact solver
+is a swept modern implementation rather than the source linked-list update
+order; it intentionally removes storage-order-dependent shot stealing.

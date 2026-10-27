@@ -85,10 +85,10 @@ int main() {
         g.tick(.01f);
         REQUIRE(g.lives == 2);
         g.pause();
-        float time = g.time, depth = g.enemies[0].depth;
+        float time = g.time, death = g.deathTime;
         advance(g, 1);
         REQUIRE(g.time == time);
-        REQUIRE(g.enemies[0].depth == depth);
+        REQUIRE(g.deathTime == death);
         g.pause();
         REQUIRE(g.mode == Mode::Playing);
         g.start();
