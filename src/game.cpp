@@ -398,6 +398,10 @@ void Game::startBonus(int type) {
     bonusCourse = bonusRuns[size_t(bonusType)]++ % 8;
     bonusesPlayed++;
     bonusTime = 0;
+    bonusDistance = bonusImpulse = bonusEffectTime = 0;
+    bonusBoosts = bonusLastScore = 0;
+    bonusSpeed =
+        (bonusType == 2 ? 37.5f : 30.f) + float(bonusRuns[size_t(bonusType)] - 1) * .46875f;
     bonusGate = 0;
     bonusHits = 0;
     bonusX = bonusY = bonusAngle = 0;
@@ -416,7 +420,33 @@ int Game::bonusGateCount() const {
     return bonusType == 1 ? 64 : int(ringCourses[size_t(bonusCourse)].size()) - 1;
 }
 float Game::bonusGateInterval() const {
-    return bonusType == 1 ? .45f : bonusType == 2 ? .55f : .65f;
+    return (bonusGateDistance(bonusGate + 1) - bonusGateDistance(bonusGate)) / bonusSpeed;
+}
+int Game::bonusGateDelay(int gate) const {
+    if (bonusType == 1)
+        return 0;
+    if (bonusType == 2)
+        return 8; // The original psycho mode overrides the packed delay.
+    const auto &course = ringCourses[size_t(bonusCourse)];
+    return int(course[size_t(std::clamp(gate, 0, int(course.size()) - 2))] >> 24);
+}
+int Game::bonusGateEffect(int gate) const {
+    if (bonusType == 1)
+        return gate == 63 ? 4 : 0;
+    const auto &course = ringCourses[size_t(bonusCourse)];
+    return int(course[size_t(std::clamp(gate, 0, int(course.size()) - 2))] & 255);
+}
+float Game::bonusGateDistance(int gate) const {
+    // Keep a short XR approach; subsequent emission gaps follow cg's source
+    // countdown: (packed delay + 1) * 12 source units. Boosts accelerate every
+    // approaching gate, rather than assigning each a fixed arrival timestamp.
+    float distance = 60;
+    for (int i = 0; i < gate; ++i)
+        distance += bonusType == 1 ? 13.5f : float(bonusGateDelay(i) + 1) * 12;
+    return distance;
+}
+float Game::bonusGateZ(int gate) const {
+    return -3.8f - (bonusGateDistance(gate) - bonusDistance) / 32;
 }
 Vec3 Game::bonusTarget(int gate) const {
     if (bonusType == 1) {
@@ -444,15 +474,16 @@ void Game::tickBonus(float dt) {
             beginTransition(level + (bonusWon && level < 90 ? 5 : 1));
         return;
     }
-    bonusY = std::clamp(bonusY + float(int(bonusUp) - int(bonusDown)) * dt * 1.6f, -4.5f, 4.5f);
-    bonusCheckTime += dt;
-    // Give the first gate a visible approach before testing alignment.
-    float arrival = 2 + float(bonusGate) * bonusGateInterval();
-    if (bonusTime >= arrival) {
+    bonusY = std::clamp(bonusY + (float(int(bonusUp) - int(bonusDown)) * 1.6f + bonusImpulse) * dt,
+                        -4.5f, 4.5f);
+    bonusImpulse *= std::exp(-6 * dt);
+    bonusEffectTime = std::max(0.f, bonusEffectTime - dt);
+    bonusDistance += bonusSpeed * dt;
+    if (bonusDistance >= bonusGateDistance(bonusGate)) {
         auto target = bonusTarget(bonusGate), cursor = bonusCursor();
+        float dx = std::abs(target.x - cursor.x), dy = std::abs(target.y - cursor.y);
         bool passed = bonusType == 1 ? std::hypot(target.x - cursor.x, target.y - cursor.y) < .6f
-                                     : std::abs(target.x - cursor.x) < .36f &&
-                                           std::abs(target.y - cursor.y) < .36f;
+                                     : dx < .25f && dy < .25f;
         if (!passed) {
             bonusFinished = true;
             bonusResultTime = 1.6f;
@@ -460,15 +491,31 @@ void Game::tickBonus(float dt) {
             sounds.push_back(Sound::Hit);
             return;
         }
+        int effect = bonusGateEffect(bonusGate);
+        // run_gate / xbon: ring accuracy selects 250 / 500 / 750 points.
+        constexpr int awards[] = {250, 500, 750, 1};
+        int error = std::clamp(int((dx + dy) * 32) / 4, 0, 3);
+        bonusLastScore = awards[bonusType == 2 ? error : 2 - std::min(2, error)];
+        if (bonusType == 1)
+            bonusLastScore = 250;
+        addScore(bonusLastScore);
+        if (effect == 1 || effect == 2) {
+            bonusImpulse = effect == 1 ? 2.4f : -2.4f;
+            announce(effect == 1 ? "UP IMPULSE" : "DOWN IMPULSE", .9f);
+            bonusEffectTime = 1;
+        } else if (effect == 3) {
+            bonusSpeed *= 1.125f; // spup adds one eighth of grndvel.
+            ++bonusBoosts;
+            bonusEffectTime = 1;
+            announce("SPEED BOOST", 1);
+        }
+        sounds.push_back(bonusBoosts % 2 ? Sound::GateYes : Sound::GateYesAlt);
         bonusHits++;
         bonusGate++;
-        addScore(100);
-        sounds.push_back(Sound::Pickup);
         burst(cursor + Vec3{0, 0, -3.8f}, 3, 32);
-        if (bonusGate >= bonusGateCount()) {
+        if (effect == 4 || bonusGate >= bonusGateCount()) {
             bonusWon = bonusFinished = true;
             bonusResultTime = 2;
-            addScore(5000);
             announce(level < 90 ? "WARP 5 LEVELS" : "EXCELLENT", 2);
             sounds.push_back(Sound::Wave);
         }

@@ -84,6 +84,10 @@ static int effectSample(Sound sound) {
         return 19;
     case Sound::Ricochet:
         return 20;
+    case Sound::GateYes:
+        return 26;
+    case Sound::GateYesAlt:
+        return 27;
     }
     return -1;
 }
@@ -229,6 +233,10 @@ void Audio::callback(void *self, Uint8 *stream, int size) {
                     break;
                 case Sound::Ricochet:
                     freq = 1700 * u + 600;
+                    break;
+                case Sound::GateYes:
+                case Sound::GateYesAlt:
+                    freq = 600 + 400 * (1 - u);
                     break;
                 }
                 v.phase += freq / 48000.f;

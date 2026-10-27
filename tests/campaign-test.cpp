@@ -191,30 +191,60 @@ int main() {
         g.spawn(Kind::Flipper, 5, .5f);
         step(g, .2f);
         CHECK(std::any_of(g.shots.begin(), g.shots.end(), [](auto &s) { return s.ally; }));
-        // Bonus failure costs no life; all three original course families are playable.
+        // Play every course with public wheel/button controls, including impulses.
+        std::set<int> gateEffects;
         for (int type = 0; type < 3; type++) {
             g.start();
-            g.startBonus(type);
-            int steps = 0;
-            while (!g.bonusFinished && steps++ < 120 * 90) {
-                auto target = g.bonusTarget(g.bonusGate);
-                if (type == 1)
-                    g.bonusAngle = std::atan2(target.y, target.x);
-                else {
-                    g.bonusX = target.x;
-                    g.bonusY = target.y;
+            for (int course = 0; course < 8; ++course) {
+                int startingLevel = g.level;
+                g.startBonus(type);
+                if (type == 0 && course == 0) {
+                    CHECK(g.bonusGateDelay(0) == 8);
+                    CHECK(g.bonusGateEffect(0) == 0);
+                    CHECK(g.bonusGateDistance(1) - g.bonusGateDistance(0) == 108);
                 }
-                g.tick(1.f / 120);
+                int steps = 0;
+                while (!g.bonusFinished && steps++ < 120 * 600) {
+                    auto target = g.bonusTarget(g.bonusGate);
+                    if (type == 1) {
+                        float delta = std::atan2(target.y, target.x) - g.bonusAngle;
+                        delta = std::atan2(std::sin(delta), std::cos(delta));
+                        g.steer(delta / .19634954f);
+                    } else {
+                        g.steer((target.x - g.bonusX) / .16f);
+                        float correction = (target.y - g.bonusY) * 30 - g.bonusImpulse;
+                        g.bonusUp = correction > .8f;
+                        g.bonusDown = correction < -.8f;
+                    }
+                    int gate = g.bonusGate, effect = g.bonusGateEffect(gate), score = g.score;
+                    float speed = g.bonusSpeed;
+                    g.tick(1.f / 120);
+                    if (g.bonusGate != gate) {
+                        gateEffects.insert(effect);
+                        CHECK(g.score - score == g.bonusLastScore);
+                        if (effect == 1)
+                            CHECK(g.bonusImpulse > 2.3f);
+                        if (effect == 2)
+                            CHECK(g.bonusImpulse < -2.3f);
+                        if (effect == 3)
+                            CHECK(std::abs(g.bonusSpeed - speed * 1.125f) < .001f);
+                        if (effect == 4)
+                            CHECK(g.bonusWon);
+                    }
+                    g.sounds.clear();
+                }
+                CHECK(g.bonusFinished);
+                CHECK(g.bonusWon);
+                CHECK(g.bonusHits == g.bonusGateCount());
+                step(g, 2.1f);
+                CHECK(g.mode == Mode::Transition);
+                CHECK(g.targetLevel == startingLevel + 5);
+                step(g, 2.5f);
+                CHECK(g.level == startingLevel + 5);
             }
-            CHECK(g.bonusFinished);
-            CHECK(g.bonusWon);
-            CHECK(g.bonusHits == g.bonusGateCount());
-            step(g, 2.1f);
-            CHECK(g.mode == Mode::Transition);
-            CHECK(g.targetLevel == 6);
-            step(g, 2.5f);
-            CHECK(g.level == 6);
         }
+        for (int effect = 0; effect <= 4; ++effect)
+            CHECK(gateEffects.count(effect));
         g.start();
         g.bonusTokens = 3;
         g.enemiesRemaining = 0;

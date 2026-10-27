@@ -457,7 +457,7 @@ void Renderer::bonusWorld(const Game &g) {
                 if ((x + z) % 2)
                     c = {c.r * .2f, c.g * .2f, c.b * .2f, .4f};
                 glColor4f(c.r, c.g, c.b, c.a);
-                float zz = -3 - float(z) * 1.5f + std::fmod(g.bonusTime * 5, 1.5f),
+                float zz = -3 - float(z) * 1.5f + std::fmod(g.bonusDistance / 32, 1.5f),
                       xx = float(x) * 1.5f;
                 for (auto p : {Vec3{xx, -2.2f, zz}, Vec3{xx + 1.5f, -2.2f, zz},
                                Vec3{xx + 1.5f, -2.2f, zz - 1.5f}, Vec3{xx, -2.2f, zz - 1.5f}})
@@ -465,12 +465,10 @@ void Renderer::bonusWorld(const Game &g) {
             }
         glEnd();
     }
-    float interval = g.bonusGateInterval();
     for (int k = g.bonusGate; k < std::min(g.bonusGate + 14, g.bonusGateCount()); k++) {
         Vec3 center = g.bonusTarget(k);
-        float remaining = 2 + float(k) * interval - g.bonusTime;
-        center.z = -3.8f - remaining * 6;
-        float radius = g.bonusType == 1 ? .6f : .36f;
+        center.z = g.bonusGateZ(k);
+        float radius = g.bonusType == 1 ? .6f : .25f;
         Color c = spectrum(float(k) * .09f + g.time * .1f, .95f);
         for (int j = 0; j < 32; j++) {
             float a = float(j) * 6.2831853f / 32, b = float(j + 1) * 6.2831853f / 32;
@@ -478,11 +476,30 @@ void Renderer::bonusWorld(const Game &g) {
                  center + Vec3{std::cos(b) * radius, std::sin(b) * radius, 0}, c);
             if (g.bonusType == 1 && k + 1 < g.bonusGateCount() && j % 4 == 0) {
                 Vec3 next = g.bonusTarget(k + 1);
-                next.z = center.z - interval * 6;
+                next.z = g.bonusGateZ(k + 1);
                 line(center + Vec3{std::cos(a) * 2, std::sin(a) * 2, 0},
                      next + Vec3{std::cos(a) * 2, std::sin(a) * 2, 0},
                      spectrum(float(j) / 32 + g.time * .1f, .45f));
             }
+        }
+        // gatefx icons: upward/downward impulse, speed boost and victory.
+        int effect = g.bonusGateEffect(k);
+        if (effect == 1 || effect == 2) {
+            float sign = effect == 1 ? 1.f : -1.f;
+            line(center + Vec3{0, -.12f * sign, 0}, center + Vec3{0, .12f * sign, 0}, white);
+            line(center + Vec3{-.07f, .04f * sign, 0}, center + Vec3{0, .12f * sign, 0}, white);
+            line(center + Vec3{.07f, .04f * sign, 0}, center + Vec3{0, .12f * sign, 0}, white);
+        } else if (effect == 3) {
+            Vec3 a = center + Vec3{-.06f, .14f, 0}, b = center + Vec3{.05f, .02f, 0},
+                 c = center + Vec3{-.03f, -.02f, 0}, d = center + Vec3{.06f, -.14f, 0};
+            line(a, b, amber);
+            line(b, c, amber);
+            line(c, d, amber);
+        } else if (effect == 4) {
+            auto tip = center + Vec3{0, .13f, 0};
+            line(center + Vec3{-.12f, -.1f, 0}, tip, effect == 3 ? amber : lime);
+            line(center + Vec3{.12f, -.1f, 0}, tip, effect == 3 ? amber : lime);
+            line(center + Vec3{-.12f, -.1f, 0}, center + Vec3{.12f, -.1f, 0}, white);
         }
     }
     Vec3 cursor = g.bonusCursor() + Vec3{0, 0, -3.8f};

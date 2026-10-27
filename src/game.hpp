@@ -51,7 +51,9 @@ enum class Sound {
     Excellent,
     OneUp,
     Pulse,
-    Ricochet
+    Ricochet,
+    GateYes,
+    GateYesAlt
 };
 struct Enemy {
     Kind kind;
@@ -121,6 +123,8 @@ class Game {
     bool jumpEnabled = false, droidActive = false, bonusUp = false, bonusDown = false,
          bonusWon = false, bonusFinished = false;
     float droidLane = 0, bonusTime = 0, bonusX = 0, bonusY = 0, bonusAngle = 0;
+    float bonusDistance = 0, bonusSpeed = 30, bonusImpulse = 0, bonusEffectTime = 0;
+    int bonusBoosts = 0, bonusLastScore = 0;
     float zapTime = 0, messageTime = 0, messageDuration = 1;
     std::string message;
     std::vector<Enemy> enemies;
@@ -152,6 +156,10 @@ class Game {
     Vec3 bonusCursor() const;
     int bonusGateCount() const;
     float bonusGateInterval() const;
+    int bonusGateDelay(int gate) const;
+    int bonusGateEffect(int gate) const;
+    float bonusGateDistance(int gate) const;
+    float bonusGateZ(int gate) const;
     void startBonus(int type);
     float progress() const {
         return isBonus() ? float(bonusGate) / std::max(1, bonusGateCount())
