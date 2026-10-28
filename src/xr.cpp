@@ -1,20 +1,13 @@
 #include "xr.hpp"
 #include "render.hpp"
 #include <SDL.h>
-#include <SDL_opengl.h>
+#include "gl_platform.hpp"
 #include <array>
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
 #ifdef TEMPEST_OPENXR
-#include <SDL_syswm.h>
-#define XR_USE_PLATFORM_XLIB
-#define XR_USE_PLATFORM_EGL
-#define XR_USE_GRAPHICS_API_OPENGL
-#include <EGL/egl.h>
-#include <GL/glx.h>
-#include <openxr/openxr.h>
-#include <openxr/openxr_platform.h>
+#include "openxr_gl_platform.hpp"
 
 namespace tempest {
 static void check(XrResult r, const char *name) {
@@ -67,17 +60,14 @@ struct XR::Impl {
 XR::XR() : p(std::make_unique<Impl>()) {}
 XR::~XR() = default;
 void XR::initialize(SDL_Window *window) {
-    SDL_SysWMinfo wm{};
-    SDL_VERSION(&wm.version);
     auto &x = *p;
-    bool useEgl = eglGetCurrentContext() != EGL_NO_CONTEXT;
-    bool hasWindowInfo = SDL_GetWindowWMInfo(window, &wm);
-    if (!useEgl && !hasWindowInfo)
-        throw std::runtime_error("SDL could not identify the native window");
-    if (!useEgl && wm.subsystem != SDL_SYSWM_X11)
-        throw std::runtime_error("XR requires a native EGL or X11/GLX OpenGL context");
+    xr_platform::Binding graphics(window);
+    bool useEgl = graphics.egl;
     const char *extensions[] = {XR_KHR_OPENGL_ENABLE_EXTENSION_NAME,
-                                XR_MNDX_EGL_ENABLE_EXTENSION_NAME};
+#ifndef _WIN32
+                                XR_MNDX_EGL_ENABLE_EXTENSION_NAME
+#endif
+                                };
     XrInstanceCreateInfo ci{XR_TYPE_INSTANCE_CREATE_INFO};
     std::strcpy(ci.applicationInfo.applicationName, "Tempest XR");
     ci.applicationInfo.apiVersion = XR_MAKE_VERSION(1, 0, 0);
@@ -102,52 +92,8 @@ void XR::initialize(SDL_Window *window) {
     if (version < requirements.minApiVersionSupported ||
         version > requirements.maxApiVersionSupported)
         throw std::runtime_error("OpenGL version is outside the OpenXR runtime's supported range");
-    XrGraphicsBindingOpenGLXlibKHR binding{XR_TYPE_GRAPHICS_BINDING_OPENGL_XLIB_KHR};
-    XrGraphicsBindingEGLMNDX eglBinding{XR_TYPE_GRAPHICS_BINDING_EGL_MNDX};
-    if (useEgl) {
-        eglBinding.display = eglGetCurrentDisplay();
-        eglBinding.context = eglGetCurrentContext();
-        eglBinding.getProcAddress =
-            reinterpret_cast<PFN_xrEglGetProcAddressMNDX>(eglGetProcAddress);
-        EGLint configId = 0, found = 0;
-        eglQueryContext(eglBinding.display, eglBinding.context, EGL_CONFIG_ID, &configId);
-        EGLint attributes[] = {EGL_CONFIG_ID, configId, EGL_NONE};
-        if (!eglChooseConfig(eglBinding.display, attributes, &eglBinding.config, 1, &found) ||
-            !found)
-            throw std::runtime_error("Could not identify SDL's EGL configuration");
-    } else {
-        Display *display = wm.info.x11.display;
-        GLXContext context = glXGetCurrentContext();
-        int id = 0;
-        glXQueryContext(display, context, GLX_FBCONFIG_ID, &id);
-        int count = 0;
-        auto configs = glXGetFBConfigs(display, DefaultScreen(display), &count);
-        GLXFBConfig config = nullptr;
-        VisualID visual = 0;
-        for (int i = 0; i < count; i++) {
-            int candidate = 0;
-            glXGetFBConfigAttrib(display, configs[i], GLX_FBCONFIG_ID, &candidate);
-            if (candidate == id) {
-                config = configs[i];
-                auto vi = glXGetVisualFromFBConfig(display, config);
-                if (vi) {
-                    visual = vi->visualid;
-                    XFree(vi);
-                }
-                break;
-            }
-        }
-        XFree(configs);
-        if (!config || !context)
-            throw std::runtime_error("Could not identify the SDL GLX context");
-        binding.xDisplay = display;
-        binding.visualid = visual;
-        binding.glxFBConfig = config;
-        binding.glxDrawable = glXGetCurrentDrawable();
-        binding.glxContext = context;
-    }
-    XrSessionCreateInfo sessionInfo{XR_TYPE_SESSION_CREATE_INFO};
-    sessionInfo.next = useEgl ? static_cast<void *>(&eglBinding) : static_cast<void *>(&binding);
+XrSessionCreateInfo sessionInfo{XR_TYPE_SESSION_CREATE_INFO};
+    sessionInfo.next = graphics.get();
     sessionInfo.systemId = x.system;
     XR_CHECK(xrCreateSession(x.instance, &sessionInfo, &x.session));
     XrReferenceSpaceCreateInfo ri{XR_TYPE_REFERENCE_SPACE_CREATE_INFO};

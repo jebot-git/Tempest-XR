@@ -3,7 +3,7 @@
 #endif
 #include "cry.hpp"
 #include "render.hpp"
-#include <SDL_opengl.h>
+#include "gl_platform.hpp"
 #include <stdexcept>
 namespace tempest {
 Color Renderer::originalColor(int hue, int intensity, float alpha) {

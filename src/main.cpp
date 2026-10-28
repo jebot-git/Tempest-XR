@@ -4,8 +4,11 @@
 #include "records.hpp"
 #include "render.hpp"
 #include "xr.hpp"
+#ifdef TEMPEST_OPENXR
+#include "openxr_video.hpp"
+#endif
 #include <SDL.h>
-#include <SDL_opengl.h>
+#include "gl_platform.hpp"
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -161,6 +164,10 @@ int main(int argc, char **argv) {
         if (launchMode == "auto" && launch.managed)
             wantXR = launch.xr;
         DomeLink dome(launch);
+#ifdef TEMPEST_OPENXR
+        xr_platform::selectVideo(wantXR);
+#endif
+        SDL_SetMainReady();
         SDL_SetHint(SDL_HINT_APP_NAME, "Tempest XR");
         SDL_SetHint("SDL_APP_ID", "org.de_xr.TempestXR");
         SDL_SetHint("SDL_VIDEO_WAYLAND_WMCLASS", "org.de_xr.TempestXR");
@@ -186,6 +193,11 @@ int main(int argc, char **argv) {
             throw std::runtime_error(SDL_GetError());
         std::cerr << "Renderer: " << glGetString(GL_RENDERER) << " / OpenGL "
                   << glGetString(GL_VERSION) << " / " << SDL_GetCurrentVideoDriver() << '\n';
+#ifdef _WIN32
+        glewExperimental = GL_TRUE;
+        if (glewInit() != GLEW_OK) throw std::runtime_error("Cannot load OpenGL functions");
+        glGetError();
+#endif
         Settings settings;
         auto path = configPath();
         if (!frameLimit) {

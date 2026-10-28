@@ -2,7 +2,7 @@
 #include "raster_data.hpp"
 #include "render.hpp"
 #include <SDL.h>
-#include <SDL_opengl.h>
+#include "gl_platform.hpp"
 #include <array>
 #include <iostream>
 #include <stdexcept>

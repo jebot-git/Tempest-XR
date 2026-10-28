@@ -13,8 +13,9 @@ upstream project's contributors. That repository does not provide a general
 open-source license grant. The imported data is not relicensed by this project.
 
 SDL2, Mesa/OpenGL/EGL, X11 and the OpenXR loader/runtime are system dependencies
-and retain their respective licenses. No copies of their libraries are bundled;
-original game data and assets are described here.
+and retain their respective licenses. Linux packages use system libraries. Standalone Windows ZIPs bundle generic
+SDL2, OpenXR loader, GLEW and runtime libraries from MSYS2; their notices are
+in `share/licenses/windows-libraries`. Original game data and assets are described here.
 
 `assets/music/*.mod` contains the seven original Jaguar Tempest 2000 music
 modules from the same pinned repository's `src/sounds/` directory. Music credits:

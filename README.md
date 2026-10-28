@@ -1,5 +1,7 @@
 # Tempest XR
 
+Standalone Ubuntu, Fedora, Arch and Windows packaging: [release instructions](packaging/standalone/README.md).
+
 A source-informed **Tempest 2000** recreation for Linux desktop and native
 OpenXR, with mouse-wheel controls, a ship-following XR camera, the original
 Jaguar music and sound samples, original shaded meshes and raster artwork/fonts, and the imported Jaguar campaign data.

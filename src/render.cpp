@@ -6,7 +6,7 @@
 #include "meshes.hpp"
 #include "raster_data.hpp"
 #include <SDL.h>
-#include <SDL_opengl.h>
+#include "gl_platform.hpp"
 #include <array>
 #include <cstdio>
 #include <filesystem>
@@ -71,7 +71,7 @@ static const RasterAtlas *rasterAtlas(std::string_view name) {
         }
         if (const char *overridePath = std::getenv("TEMPEST_ART_DIR"))
             directory = overridePath;
-        SDL_Surface *raw = SDL_LoadBMP((directory / (std::string(name) + ".bmp")).c_str());
+        SDL_Surface *raw = SDL_LoadBMP((directory / (std::string(name) + ".bmp")).u8string().c_str());
         if (raw) {
             SDL_Surface *surface = SDL_ConvertSurfaceFormat(raw, SDL_PIXELFORMAT_RGBA32, 0);
             SDL_FreeSurface(raw);

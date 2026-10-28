@@ -9,8 +9,7 @@ Terminal=false
 Categories=Game;ArcadeGame;
 StartupNotify=true
 StartupWMClass=org.de_xr.TempestXR
-X-DomeD-Bundled=true
-X-DomeD-NativeXR=true
+@TEMPEST_DESKTOP_INTEGRATION@
 Actions=Desktop;NativeXR;Stereo;
 
 [Desktop Action Desktop]

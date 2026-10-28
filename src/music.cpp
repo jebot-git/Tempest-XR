@@ -1,7 +1,7 @@
 #include "music.hpp"
 #include <algorithm>
 #include <cstdint>
-#include <dlfcn.h>
+#include <SDL_loadso.h>
 #include <fstream>
 #include <iterator>
 #include <vector>
@@ -26,18 +26,24 @@ struct Music::Impl {
     size_t (*read)(openmpt_module *, int32_t, size_t, float *) = nullptr;
     int (*repeat)(openmpt_module *, int32_t) = nullptr;
     Impl() {
-        library = dlopen("libopenmpt.so.0", RTLD_NOW | RTLD_LOCAL);
+        library = SDL_LoadObject(
+#ifdef _WIN32
+            "libopenmpt-0.dll"
+#else
+            "libopenmpt.so.0"
+#endif
+        );
         if (!library)
             return;
         create = reinterpret_cast<decltype(create)>(
-            dlsym(library, "openmpt_module_create_from_memory2"));
-        destroy = reinterpret_cast<decltype(destroy)>(dlsym(library, "openmpt_module_destroy"));
+            SDL_LoadFunction(library, "openmpt_module_create_from_memory2"));
+        destroy = reinterpret_cast<decltype(destroy)>(SDL_LoadFunction(library, "openmpt_module_destroy"));
         read = reinterpret_cast<decltype(read)>(
-            dlsym(library, "openmpt_module_read_interleaved_float_stereo"));
+            SDL_LoadFunction(library, "openmpt_module_read_interleaved_float_stereo"));
         repeat =
-            reinterpret_cast<decltype(repeat)>(dlsym(library, "openmpt_module_set_repeat_count"));
+            reinterpret_cast<decltype(repeat)>(SDL_LoadFunction(library, "openmpt_module_set_repeat_count"));
         if (!create || !destroy || !read || !repeat) {
-            dlclose(library);
+            SDL_UnloadObject(library);
             library = nullptr;
         }
     }
@@ -47,7 +53,7 @@ struct Music::Impl {
         if (module)
             destroy(module);
         if (library)
-            dlclose(library);
+            SDL_UnloadObject(library);
     }
 };
 Music::Music() : p(std::make_unique<Impl>()) {}
