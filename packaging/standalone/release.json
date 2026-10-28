@@ -1,7 +1,7 @@
 {
   "project": "Tempest-XR",
   "package": "tempest-xr",
-  "version": "0.1.0.20261028",
+  "version": "0.1.0.20261029",
   "arch_dependencies": [
     "sdl2",
     "openxr",
